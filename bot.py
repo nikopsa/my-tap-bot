@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # Токен и настройки (ссылка исправлена)
-API_TOKEN = '8377110375:AAHrAOLQOvAKOanxJFccT5V7ofiK1-TWvTk'
+API_TOKEN = '8377110375:AAG6xPo3eqYfMwqXxuqwpjkGJlsj57gSefU'
 GAME_URL = 'https://nikopsa.github.io'
 
 logging.basicConfig(level=logging.INFO)
