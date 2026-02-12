@@ -3,22 +3,22 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiohttp import web
 
-# СВЕЖИЙ ТОКЕН
+# Твой актуальный токен
 TOKEN = '8377110375:AAHoZfiYoow9it_2SsIYNsR0cE_Jwd9jKyU'
-# ПРЯМАЯ ССЫЛКА (БЕЗ ПАПОК)
+# ПРЯМАЯ ССЫЛКА (так как index.html лежит рядом с bot.py)
 URL = 'https://nikopsa.github.io'
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 async def handle(request):
-    return web.Response(text="БОТ РАБОТАЕТ")
+    return web.Response(text="LIVE")
 
 @dp.message(Command("start"))
 async def cmd_start(m: types.Message):
     kb = [[types.KeyboardButton(text="Играть 🎮", web_app=types.WebAppInfo(url=URL))]]
     markup = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-    await m.answer("Супер Тап запущен! 🚀", reply_markup=markup)
+    await m.answer("Бот Василий готов! Жми играть 🚀", reply_markup=markup)
 
 async def main():
     app = web.Application()
