@@ -1,9 +1,9 @@
-logging
+import asyncio
+import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-# Токен и настройки (ссылка исправлена)
 API_TOKEN = '8377110375:AAG6xPo3eqYfMwqXxuqwpjkGJlsj57gSefU'
 GAME_URL = 'https://nikopsa.github.io'
 
@@ -14,31 +14,13 @@ dp = Dispatcher()
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = ReplyKeyboardBuilder()
-    
-    # Кнопка запуска игры
-    builder.row(types.KeyboardButton(
-        text="Играть 🎮", 
-        web_app=types.WebAppInfo(url=GAME_URL))
-    )
-    
-    # Кнопки меню
-    builder.row(
-        types.KeyboardButton(text="Баланс 💰"),
-        types.KeyboardButton(text="Энергия ⚡")
-    )
-    
-    await message.answer(
-        "Василий, Super Tap готов! 🚀\n\nЖми 'Играть', чтобы копить монеты.",
-        reply_markup=builder.as_markup(resize_keyboard=True)
-    )
+    builder.row(types.KeyboardButton(text="Играть 🎮", web_app=types.WebAppInfo(url=GAME_URL)))
+    builder.row(types.KeyboardButton(text="Баланс 💰"), types.KeyboardButton(text="Энергия ⚡"))
+    await message.answer("Василий, Super Tap готов! 🚀\n\nЖми 'Играть'.", reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(lambda message: message.text == "Баланс 💰")
 async def show_balance(message: types.Message):
-    await message.answer("💰 Ваш баланс: 0\n\nПродолжайте тапать!")
-
-@dp.message(lambda message: message.text == "Энергия ⚡")
-async def show_energy(message: types.Message):
-    await message.answer("⚡ Энергия: 100/100")
+    await message.answer("💰 Баланс: 0")
 
 async def main():
     print("Бот запущен!")
@@ -46,4 +28,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
