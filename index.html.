@@ -1,0 +1,32 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tap Bot</title>
+    <script src="https://telegram.org"></script>
+    <style>
+        body { background: #000; color: #fff; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        #score { font-size: 3em; margin-bottom: 10px; color: gold; }
+        #coin { width: 150px; height: 150px; background: orange; border-radius: 50%; font-size: 5em; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; box-shadow: 0 0 20px rgba(255, 165, 0, 0.5); }
+        #coin:active { transform: scale(0.9); }
+    </style>
+</head>
+<body>
+    <div id="score">0</div>
+    <div id="coin">🔘</div>
+    <script>
+        let tg = window.Telegram.WebApp;
+        let score = localStorage.getItem('score') || 0;
+        const scoreDisplay = document.getElementById('score');
+        scoreDisplay.innerText = score;
+        tg.expand();
+        document.getElementById('coin').addEventListener('click', () => {
+            score++;
+            scoreDisplay.innerText = score;
+            localStorage.setItem('score', score);
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        });
+    </script>
+</body>
+</html>
