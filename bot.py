@@ -1,24 +1,22 @@
-import asyncio
+import asyncio, random
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiohttp import web
 
-# ТВОЙ ПОСЛЕДНИЙ ТОКЕН
 TOKEN = '8377110375:AAEMr2VfEfrXGOvKAxexADGOrDfVcEQH7Mk'
-# ПРЯМАЯ ССЫЛКА БЕЗ ПАПОК
-URL = 'https://nikopsa.github.io'
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-async def handle(request):
-    return web.Response(text="LIVE")
+async def handle(r): return web.Response(text="OK")
 
 @dp.message(Command("start"))
-async def cmd_start(m: types.Message):
-    kb = [[types.KeyboardButton(text="ЛУЧШИЙ ТАП 💰", web_app=types.WebAppInfo(url=URL))]]
-    markup = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-    await m.answer("Лучший Тап готов! 🚀\nЖми на кнопку ниже:", reply_markup=markup)
+async def s(m: types.Message):
+    # Генерация уникальной ссылки для пробива кэша
+    ver = random.randint(1, 99999)
+    url = f'https://nikopsa.github.io{ver}'
+    kb = [[types.KeyboardButton(text="ИГРАТЬ 💰", web_app=types.WebAppInfo(url=url))]]
+    await m.answer("Жми кнопку, кэш очищен!", reply_markup=types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
 
 async def main():
     app = web.Application()
