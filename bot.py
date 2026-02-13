@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, BigInteger, Integer
 
-# --- НАСТРОЙКИ ---
+# --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
 
@@ -18,21 +18,24 @@ app = FastAPI()
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Супер-обработка URL: чистим всё, что может сломать запуск
+# ЖЕСТКАЯ ОЧИСТКА ССЫЛКИ
 raw_url = os.getenv("DATABASE_URL_FIXED", "")
-clean_url = raw_url.replace("@://", "@").replace(":@", "@").strip()
-if clean_url and not clean_url.endswith("/fenix_tap"):
-    clean_url += "/fenix_tap"
+# Убираем ту самую хрень "@://" и заменяем на нормальный "@"
+clean_url = raw_url.replace("@://", "@").strip()
 
-# Создаем движок только если ссылка не пустая, иначе — заглушка
+# Добавляем имя базы в конец, если его нет
+if clean_url and not clean_url.endswith("/fenix_tap"):
+    clean_url = clean_url.rstrip("/") + "/fenix_tap"
+
 engine = None
 if "postgresql" in clean_url:
     try:
+        # Создаем движок из УЖЕ ЧИСТОЙ ссылки
         engine = create_async_engine(clean_url, pool_pre_ping=True)
         async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        logging.info(f"✅ Ссылка очищена и принята")
     except Exception as e:
-        logging.error(f"Ошибка инициализации движка: {e}")
-        engine = None
+        logging.error(f"❌ Ошибка в очищенной ссылке: {e}")
 
 class User(Base):
     __tablename__ = "users"
@@ -45,25 +48,28 @@ async def startup():
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            logging.info("✅ БАЗА ПРИНЯТА")
+            logging.info("✅ База данных готова к работе")
         except Exception as e:
-            logging.error(f"❌ БАЗА НЕ ОТВЕТИЛА: {e}")
+            logging.error(f"❌ База не ответила: {e}")
     
     await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-    logging.info("🚀 СЕРВЕР ЗАПУЩЕН")
+    logging.info("🚀 БОТ ЗАПУЩЕН")
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    if os.path.exists("index.html"):
+    try:
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
-    return "<h1>Файл index.html не найден</h1>"
+    except:
+        return "<h1>Загрузка игры...</h1>"
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    update = types.Update.model_validate(data, context={"bot": bot})
-    await dp.feed_update(bot, update)
+    try:
+        data = await request.json()
+        update = types.Update.model_validate(data, context={"bot": bot})
+        await dp.feed_update(bot, update)
+    except: pass
     return {"ok": True}
 
 @dp.message()
@@ -82,7 +88,7 @@ async def get_user(user_id: int):
 
 @app.post("/update_score")
 async def update_score(data: dict):
-    if not engine: return {"status": "no_db"}
+    if not engine: return {"status": "error"}
     user_id = data.get("user_id")
     score = data.get("score")
     async with async_session() as session:
