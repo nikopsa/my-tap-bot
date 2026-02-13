@@ -1,2 +1,3 @@
-pyTelegramBotAPI
-flask
+fastapi
+uvicorn
+aiogram
