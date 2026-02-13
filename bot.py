@@ -12,16 +12,16 @@ def home():
     return "SuPerKLikEr is alive!"
 
 def run():
-    # Render сам назначит порт
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
+    t.daemon = True
     t.start()
 
 # --- 2. НАСТРОЙКА БОТА ---
-# ТВОЙ НОВЫЙ ТОКЕН:
+# Твой актуальный токен
 TOKEN = '8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg'
 bot = telebot.TeleBot(TOKEN)
 
@@ -29,22 +29,25 @@ bot = telebot.TeleBot(TOKEN)
 def start(message):
     markup = types.InlineKeyboardMarkup()
     
-    # Ссылка на твою игру (GitHub Pages)
+    # Ссылка на игру (БЕЗ ДЕФИСА, если ты сменил название репозитория)
+    # Если репозиторий на GitHub всё еще называется "my-tap-bot", оставь ссылку как есть
     game_url = "https://nikopsa.github.io"
     
     web_app = types.WebAppInfo(game_url)
-    btn = types.InlineKeyboardButton("🚀 ИГРАТЬ В SUPER-KLIKER", web_app=web_app)
+    btn = types.InlineKeyboardButton("🚀 ИГРАТЬ В SUPERKLIKER", web_app=web_app)
     markup.add(btn)
     
     bot.send_message(
         message.chat.id, 
-        f"Привет, {message.from_user.first_name}!\n\nЖми кнопку ниже, чтобы запустить игру:", 
+        f"Привет, {message.from_user.first_name}!\n\nДобро пожаловать в SuPerKLikEr. Жми кнопку ниже:", 
         reply_markup=markup
     )
 
-# --- 3. ЗАПУСК БОТА ---
+# --- 3. ЗАПУСК ---
 if __name__ == '__main__':
-    keep_alive() # Запуск обманки для порта
-    print("Бот запущен с новым токеном!")
-    # skip_pending=True гарантированно уберет ошибку 409
-    bot.polling(none_stop=True, skip_pending=True)
+    keep_alive()
+    print("Бот SuPerKLikEr запущен!")
+    try:
+        bot.polling(none_stop=True, skip_pending=True)
+    except Exception as e:
+        print(f"Ошибка: {e}")
