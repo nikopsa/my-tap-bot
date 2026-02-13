@@ -9,7 +9,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "SuPer-KLikEr is alive!"
+    return "SuPerKLikEr is alive!"
 
 def run():
     # Render сам назначит порт
