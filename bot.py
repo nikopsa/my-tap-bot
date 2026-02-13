@@ -1,5 +1,6 @@
 import os, logging
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
@@ -7,16 +8,16 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, BigInteger, Integer, select
 
-# --- ДАННЫЕ ---
+# --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 URL = "https://my-tap-bot.onrender.com"
 
-# ГАРАНТИРОВАННАЯ ОЧИСТКА ССЫЛКИ
+# ЧИСТКА ССЫЛКИ БАЗЫ
 raw_db = os.getenv("DATABASE_URL_FIXED", "")
 clean_db = raw_db.replace("@://", "@").replace("postgresql://", "postgresql+asyncpg://").strip()
 
-# ПРИНУДИТЕЛЬНОЕ ИМЯ БАЗЫ (чтобы не было ошибки fenix_tap_user)
-if not clean_db.endswith("/fenix_tap"):
+# ПРИНУДИТЕЛЬНОЕ ИМЯ БАЗЫ (убиваем ошибку fenix_tap_user)
+if "fenix_tap" not in clean_db:
     DB_URL = clean_db.split('?')[0].rstrip('/') + "/fenix_tap"
 else:
     DB_URL = clean_db
@@ -34,21 +35,28 @@ class User(Base):
     auto = Column(Integer, default=0)
 
 app = FastAPI()
+# CORS чтобы кнопки не висли
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
 bot = Bot(TOKEN)
 dp = Dispatcher()
 
 @app.on_event("startup")
 async def startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await bot.set_webhook(f"{URL}/webhook")
-    logging.info("FENIX_TAP_LOADED_SUCCESSFULLY")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        await bot.set_webhook(f"{URL}/webhook")
+        logging.info("FENIX_TAP_SYSTEM_READY")
+    except Exception as e:
+        logging.error(f"DATABASE_CONNECTION_ERROR: {e}")
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return types.responses.HTMLResponse(f.read())
+    if os.path.exists("index.html"):
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>Файл index.html не найден в корне проекта</h1>"
 
 @app.get("/u/{uid}")
 async def get_u(uid: int):
@@ -67,7 +75,9 @@ async def save(request: Request):
     async with Session() as s:
         u = await s.get(User, int(d['id']))
         if u:
-            u.score, u.mult, u.auto = int(d['score']), int(d['mult']), int(d['auto'])
+            u.score = int(d['score'])
+            u.mult = int(d['mult'])
+            u.auto = int(d['auto'])
             await s.commit()
     return {"ok": True}
 
@@ -79,11 +89,14 @@ async def top():
 
 @app.post("/webhook")
 async def wh(r: Request):
-    upd = types.Update.model_validate(await r.json(), context={"bot": bot})
+    data = await r.json()
+    upd = types.Update.model_validate(data, context={"bot": bot})
     await dp.feed_update(bot, upd)
     return {"ok": True}
 
 @dp.message()
 async def st(m: types.Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 SuPerKLikEr", web_app=WebAppInfo(url=URL))]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 SuPerKLikEr", web_app=WebAppInfo(url=URL))]
+    ])
     await m.answer("Жми кнопку и тапай!", reply_markup=kb)
