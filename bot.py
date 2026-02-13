@@ -4,15 +4,15 @@ from telebot import types
 from flask import Flask
 from threading import Thread
 
-# --- 1. ОБМАНКА ДЛЯ ВЕБ-СЕРВИСА (RENDER) ---
+# --- 1. ОБМАНКА ДЛЯ RENDER ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    return "SuPer-KLikEr is alive!"
 
 def run():
-    # Подхватываем порт от Render
+    # Render сам назначит порт
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -20,16 +20,16 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# --- 2. ЛОГИКА БОТА ---
-# Твой токен
-TOKEN = '8377110375:AAHm15GWZEY4nmeRkFOqUEUToH_9NwcjMdE'
+# --- 2. НАСТРОЙКА БОТА ---
+# ТВОЙ НОВЫЙ ТОКЕН:
+TOKEN = '8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg'
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.InlineKeyboardMarkup()
     
-    # Твоя ссылка на игру (GitHub Pages)
+    # Ссылка на твою игру (GitHub Pages)
     game_url = "https://nikopsa.github.io"
     
     web_app = types.WebAppInfo(game_url)
@@ -38,13 +38,13 @@ def start(message):
     
     bot.send_message(
         message.chat.id, 
-        f"Привет, {message.from_user.first_name}!\n\nЖми кнопку ниже, чтобы начать тапать:", 
+        f"Привет, {message.from_user.first_name}!\n\nЖми кнопку ниже, чтобы запустить игру:", 
         reply_markup=markup
     )
 
-# --- 3. ЗАПУСК ---
+# --- 3. ЗАПУСК БОТА ---
 if __name__ == '__main__':
-    keep_alive() # Запуск веб-сервера
-    print("Бот успешно запущен!")
-    # ИСПРАВЛЕНО: Добавлен True в конец
+    keep_alive() # Запуск обманки для порта
+    print("Бот запущен с новым токеном!")
+    # skip_pending=True гарантированно уберет ошибку 409
     bot.polling(none_stop=True, skip_pending=True)
