@@ -7,15 +7,20 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, BigInteger, Integer
+from sqlalchemy.engine.url import make_url
 
-# --- НАСТРОЙКИ ---
+# --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-
-# ВАЖНО: Я убрал двоеточие перед названием базы вручную
 RAW_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
-# Очистка ссылки от возможных ошибок при копировании
-DATABASE_URL = RAW_URL.replace(':@', '@').replace(':@', '@').strip()
+
+# Очистка URL: удаляем порт, если он пустой, и исправляем формат
+db_url_obj = make_url(RAW_URL.replace("postgresql://", "postgresql+asyncpg://"))
+if db_url_obj.port is None:
+    # Принудительно убираем двоеточие, которое вызывает ValueError
+    DATABASE_URL = str(db_url_obj).replace(":None", "").replace("/None", "")
+else:
+    DATABASE_URL = str(db_url_obj)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,7 +34,7 @@ class User(Base):
     user_id = Column(BigInteger, primary_key=True)
     score = Column(Integer, default=0)
 
-# --- БОТ И СЕРВЕР ---
+# --- ПРИЛОЖЕНИЕ ---
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 app = FastAPI()
@@ -40,9 +45,9 @@ async def startup():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-        logging.info("FENIX SYSTEM ONLINE")
+        logging.info("🔥 FENIX SYSTEM ONLINE 🔥")
     except Exception as e:
-        logging.error(f"DATABASE ERROR: {e}")
+        logging.error(f"CRITICAL STARTUP ERROR: {e}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -54,9 +59,9 @@ async def webhook(request: Request):
 @dp.message()
 async def start_handler(message: types.Message):
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔥 ИГРАТЬ (FENIX TAP) 🔥", web_app=WebAppInfo(url=BASE_URL))]
+        [InlineKeyboardButton(text="🚀 ИГРАТЬ (FENIX TAP)", web_app=WebAppInfo(url=BASE_URL))]
     ])
-    await message.answer(f"Привет! Твой счет сохраняется автоматически.", reply_markup=markup)
+    await message.answer(f"Привет, {message.from_user.first_name}! Тапай и копи очки!", reply_markup=markup)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
