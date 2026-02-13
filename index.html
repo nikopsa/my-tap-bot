@@ -5,67 +5,104 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://telegram.org"></script>
     <style>
-        body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; user-select: none; }
-        #score { font-size: 50px; font-weight: bold; margin-bottom: 20px; }
-        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 8px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 30px orange; }
+        body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between; height: 100vh; margin: 0; padding: 20px 0; overflow: hidden; user-select: none; }
+        
+        .top-nav, .bottom-nav { display: flex; justify-content: space-around; width: 100%; z-index: 5; }
+        
+        #score { font-size: 55px; font-weight: bold; margin-top: 10px; text-shadow: 0 0 15px gold; }
+        #auto-info { font-size: 14px; color: #fff; opacity: 0.6; }
+
+        .coin { width: 230px; height: 230px; background: orange; border-radius: 50%; border: 10px solid gold; font-size: 90px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 30px orange; margin: auto; }
         .coin:active { transform: scale(0.92); }
-        .btns { display: flex; gap: 10px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
-        .btn { padding: 10px 15px; background: gold; color: #000; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 14px; }
+
+        .btn { width: 40%; padding: 12px; background: rgba(255, 215, 0, 0.2); color: gold; border: 1px solid gold; border-radius: 15px; font-weight: bold; cursor: pointer; backdrop-filter: blur(5px); }
+        
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10; padding-top: 40px; }
         .plus-one { position: absolute; color: #fff; font-size: 28px; font-weight: bold; animation: moveUp 0.6s forwards; pointer-events: none; }
         @keyframes moveUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-100px); } }
     </style>
 </head>
 <body>
-    <div id="score">0</div>
+    <div class="top-nav">
+        <div class="btn" onclick="showLeaders()">🏆 ТОП</div>
+        <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
+    </div>
+
+    <div>
+        <div id="score">0</div>
+        <div id="auto-info">Автомайнинг: 0/сек</div>
+    </div>
+
     <div class="coin" id="coin">🔥</div>
     
-    <div class="btns">
-        <div class="btn" onclick="showLeaders()">🏆 ТОП</div>
+    <div class="bottom-nav">
         <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
-        <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
+        <div class="btn" onclick="buyAuto()">⚙️ МАЙНЕР</div>
     </div>
 
     <div id="modal">
         <h2 id="m-title"></h2>
-        <div id="m-list" style="padding: 20px; max-height: 60vh; overflow-y: auto;"></div>
+        <div id="m-list" style="padding: 20px;"></div>
         <div class="btn" onclick="closeM()">ЗАКРЫТЬ</div>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
-        let count = 0, mult = 1;
+        let count = 0, mult = 1, autoRate = 0;
 
         fetch(`/get_user/${userId}`).then(r => r.json()).then(d => {
-            count = d.score; mult = d.mult || 1;
-            document.getElementById('score').innerText = count;
+            count = d.score; mult = d.mult || 1; autoRate = d.auto || 0;
+            updateUI();
         });
 
+        // Цикл автомайнинга
+        setInterval(() => {
+            if (autoRate > 0) {
+                count += autoRate;
+                updateUI();
+                if (Math.random() > 0.8) save(); // Автосохранение
+            }
+        }, 1000);
+
+        function updateUI() {
+            document.getElementById('score').innerText = Math.floor(count);
+            document.getElementById('auto-info').innerText = `Автомайнинг: ${autoRate}/сек | Клик: +${mult}`;
+        }
+
         document.getElementById('coin').addEventListener('touchstart', (e) => {
-            count += mult;
-            document.getElementById('score').innerText = count;
+            count += mult; updateUI();
             const p = document.createElement('div');
             p.className = 'plus-one'; p.innerText = `+${mult}`;
             p.style.left = e.touches[0].clientX + 'px'; p.style.top = e.touches[0].clientY + 'px';
             document.body.appendChild(p);
             setTimeout(() => p.remove(), 600);
-            if (count % 5 === 0) save();
+            if (count % 10 === 0) save();
         });
 
         function save() {
             fetch('/update_score', { method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, score: count, mult: mult})
+                body: JSON.stringify({user_id: userId, score: count, mult: mult, auto: autoRate})
             });
         }
 
+        function buyAuto() {
+            let cost = (autoRate + 1) * 500;
+            if (count >= cost) {
+                count -= cost; autoRate++; updateUI(); save();
+                alert("Майнер улучшен!");
+            } else { alert(`Нужно ${cost} монет!`); }
+        }
+
         function showShop() {
-            openM("МАГАЗИН", `<p>Улучшить клик до +${mult+1}<br>Цена: ${mult*200} 🪙</p>
-                <div class="btn" onclick="buy(${mult*200})">КУПИТЬ</div>`);
+            let cost = mult * 200;
+            openM("МАГАЗИН", `<p>Прокачка клика до +${mult+1}<br>Цена: ${cost} 🪙</p>
+                <div class="btn" style="width:80%" onclick="buy(${cost})">КУПИТЬ</div>`);
         }
 
         function buy(cost) {
-            if (count >= cost) { count -= cost; mult++; save(); closeM(); } else { alert("Мало монет!"); }
+            if (count >= cost) { count -= cost; mult++; updateUI(); save(); closeM(); } 
+            else { alert("Мало монет!"); }
         }
 
         function showLeaders() {
@@ -77,8 +114,8 @@
 
         function showFriends() {
             let link = `https://t.me{userId}`;
-            openM("ДРУЗЬЯ", `<p>За друга: 500 🪙</p><input readonly value="${link}" style="width:80%"><br><br>
-                <div class="btn" onclick="navigator.clipboard.writeText('${link}')">КОПИРОВАТЬ</div>`);
+            openM("ДРУЗЬЯ", `<p>Твоя ссылка:</p><input readonly value="${link}" style="width:90%"><br><br>
+                <div class="btn" style="width:80%" onclick="navigator.clipboard.writeText('${link}')">КОПИРОВАТЬ</div>`);
         }
 
         function openM(t, h) { document.getElementById('m-title').innerText = t; document.getElementById('m-list').innerHTML = h; document.getElementById('modal').style.display='block'; }
