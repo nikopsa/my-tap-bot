@@ -5,31 +5,75 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://telegram.org"></script>
     <style>
-        body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; user-select: none; }
-        #score { font-size: 60px; font-weight: bold; margin-bottom: 20px; }
-        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 10px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; }
+        body { 
+            background: radial-gradient(circle, #2c3e50, #000); 
+            color: gold; text-align: center; font-family: sans-serif; 
+            display: flex; flex-direction: column; justify-content: center; 
+            align-items: center; height: 100vh; margin: 0; overflow: hidden; 
+            user-select: none; -webkit-tap-highlight-color: transparent;
+        }
+        #score { font-size: 60px; font-weight: bold; margin-bottom: 20px; text-shadow: 0 0 20px gold; }
+        
+        .coin-wrapper { position: relative; display: flex; justify-content: center; align-items: center; }
+        
+        .coin { 
+            width: 240px; height: 240px; 
+            background: linear-gradient(45deg, #f1c40f, #f39c12); 
+            border-radius: 50%; border: 10px solid #d35400; 
+            font-size: 90px; display: flex; justify-content: center; 
+            align-items: center; cursor: pointer; 
+            box-shadow: 0 0 40px rgba(241, 196, 15, 0.5);
+            transition: transform 0.05s;
+        }
+        
         .coin:active { transform: scale(0.92); }
+
+        .plus-one {
+            position: absolute; color: #fff; font-size: 32px; font-weight: bold;
+            animation: moveUp 0.7s ease-out forwards; pointer-events: none;
+        }
+
+        @keyframes moveUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-120px); }
+        }
     </style>
 </head>
 <body>
     <div id="score">0</div>
-    <div class="coin" onclick="handleTap()">🔥</div>
+    <div class="coin-wrapper">
+        <div class="coin" id="coin">🔥</div>
+    </div>
+
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
         let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
         let count = 0;
+        const scoreEl = document.getElementById('score');
 
-        // Грузим данные
+        // Загрузка
         fetch(`/get_user/${userId}`).then(r => r.json()).then(d => {
             count = d.score || 0;
-            document.getElementById('score').innerText = count;
-        }).catch(() => { document.getElementById('score').innerText = 0; });
+            scoreEl.innerText = count;
+        });
 
-        function handleTap() {
+        // Тап без вибрации
+        document.getElementById('coin').addEventListener('touchstart', (e) => {
             count++;
-            document.getElementById('score').innerText = count;
-            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+            scoreEl.innerText = count;
+            
+            // Создаем визуальный эффект +1
+            const touch = e.touches[0];
+            const p = document.createElement('div');
+            p.className = 'plus-one';
+            p.innerText = '+1';
+            p.style.left = touch.clientX + 'px';
+            p.style.top = touch.clientY + 'px';
+            document.body.appendChild(p);
+            setTimeout(() => p.remove(), 700);
+
+            // Сохранение
             if (count % 5 === 0) {
                 fetch('/update_score', {
                     method: 'POST',
@@ -37,7 +81,7 @@
                     body: JSON.stringify({user_id: userId, score: count})
                 });
             }
-        }
+        });
     </script>
 </body>
 </html>
