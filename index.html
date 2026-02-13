@@ -5,56 +5,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between; height: 100vh; overflow: hidden; user-select: none; }
-        .nav { display: flex; justify-content: space-around; width: 100%; padding: 15px 0; }
+        body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; }
+        .row { display: flex; justify-content: space-around; padding: 15px; }
         #score { font-size: 55px; font-weight: bold; text-shadow: 0 0 15px gold; }
-        .coin-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; }
-        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 8px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 35px orange; }
-        .coin:active { transform: scale(0.92); }
-        .btn { width: 44%; padding: 12px; background: rgba(255, 215, 0, 0.15); color: gold; border: 1px solid gold; border-radius: 15px; font-weight: bold; cursor: pointer; font-size: 14px; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); z-index: 100; padding-top: 40px; }
-        .plus-one { position: absolute; color: #fff; font-size: 32px; font-weight: bold; animation: moveUp 0.6s forwards; pointer-events: none; }
-        @keyframes moveUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-130px); } }
+        .coin { width: 230px; height: 230px; background: orange; border-radius: 50%; border: 8px solid gold; font-size: 90px; display: flex; justify-content: center; align-items: center; margin: auto; box-shadow: 0 0 30px orange; cursor: pointer; transition: transform 0.05s; }
+        .coin:active { transform: scale(0.95); }
+        .btn { padding: 12px; background: rgba(255,215,0,0.2); border: 1px solid gold; color: gold; border-radius: 12px; width: 45%; font-weight: bold; cursor: pointer; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; padding: 30px; }
+        .plus { position: absolute; color: white; font-size: 30px; font-weight: bold; animation: up 0.6s forwards; pointer-events: none; }
+        @keyframes up { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-100px); } }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <div class="btn" onclick="showLeaders();">🏆 ТОП</div>
-        <div class="btn" onclick="showFriends();">👥 ДРУЗЬЯ</div>
-    </div>
-    <div>
-        <div id="score">0</div>
-        <div id="info">SuPerKLikEr</div>
-    </div>
-    <div class="coin-container">
-        <div class="coin" id="coin">🔥</div>
-    </div>
-    <div class="nav">
-        <div class="btn" onclick="showShop();">🛒 МАГАЗИН</div>
-        <div class="btn" onclick="buyAuto();">⚙️ МАЙНЕР</div>
-    </div>
+    <div class="row"><div class="btn" onclick="showT()">🏆 ТОП</div><div class="btn" onclick="showR()">👥 ДРУЗЬЯ</div></div>
+    <div><div id="score">0</div><div id="status" style="opacity:0.6">Загрузка...</div></div>
+    <div class="coin" id="coin">🔥</div>
+    <div class="row"><div class="btn" onclick="showS()">🛒 МАГАЗИН</div><div class="btn" onclick="buyA()">⚙️ МАЙНЕР</div></div>
+
     <div id="modal">
-        <h2 id="m-title" style="color:gold;"></h2>
-        <div id="m-list" style="padding: 20px; color: white;"></div>
-        <div class="btn" style="width: 60%; margin: 20px auto;" onclick="closeM();">ЗАКРЫТЬ</div>
+        <h2 id="mt" style="color:gold"></h2><br><div id="ml" style="color:white"></div><br>
+        <div class="btn" style="width:100%" onclick="closeM()">ЗАКРЫТЬ</div>
     </div>
+
     <script>
         let tg = window.Telegram.WebApp; tg.expand();
-        let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
-        let count = 0, mult = 1, autoRate = 0;
-        function updateUI() { document.getElementById('score').innerText = Math.floor(count); document.getElementById('info').innerText = `Клик: +${mult} | Авто: ${autoRate}/с`; }
-        fetch('/get_user/' + userId).then(r => r.json()).then(d => { count = Number(d.score) || 0; mult = Number(d.mult) || 1; autoRate = Number(d.auto) || 0; updateUI(); }).catch(() => updateUI());
-        setInterval(() => { if (autoRate > 0) { count += autoRate; updateUI(); if (Math.random() > 0.8) save(); } }, 1000);
-        const handleTap = (e) => { e.preventDefault(); count += mult; updateUI(); let pos = e.touches ? e.touches[0] : e; let p = document.createElement('div'); p.className = 'plus-one'; p.innerText = '+' + mult; p.style.left = pos.pageX + 'px'; p.style.top = pos.pageY + 'px'; document.body.appendChild(p); setTimeout(() => p.remove(), 600); if (count % 10 === 0) save(); };
-        const coin = document.getElementById('coin'); coin.addEventListener('touchstart', handleTap); coin.addEventListener('mousedown', handleTap);
-        function save() { fetch('/update_score', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_id: userId, score: Math.floor(count), mult: mult, auto: autoRate}) }); }
-        function showShop() { openM("МАГАЗИН", `Клик +1 (Цена: ${mult * 250})<br><br><div class="btn" style="width:100%" onclick="buyMult();">КУПИТЬ</div>`); }
-        function buyMult() { let c = mult * 250; if (count >= c) { count -= c; mult++; save(); updateUI(); closeM(); } else { alert("Мало!"); } }
-        function buyAuto() { let c = (autoRate + 1) * 600; if (count >= c) { count -= c; autoRate++; save(); updateUI(); } else { alert("Мало!"); } }
-        function showLeaders() { openM("ТОП", "Загрузка..."); fetch('/get_leaders').then(r => r.json()).then(d => { document.getElementById('m-list').innerHTML = d.map(l => `${l.id}: ${l.score}`).join('<br>'); }); }
-        function showFriends() { openM("ДРУЗЬЯ", `ID: ${userId}<br>https://t.me{userId}`); }
-        function openM(t, h) { document.getElementById('m-title').innerText = t; document.getElementById('m-list').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
+        let id = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
+        let score = 0, mult = 1, auto = 0;
+
+        function draw() {
+            document.getElementById('score').innerText = Math.floor(score);
+            document.getElementById('status').innerText = `Клик: +${mult} | Майнинг: ${auto}/с`;
+        }
+
+        fetch('/u/' + id).then(r => r.json()).then(d => {
+            score = d.score; mult = d.mult; auto = d.auto; draw();
+        });
+
+        setInterval(() => { if(auto > 0) { score += auto; draw(); if(Math.random() > 0.8) save(); } }, 1000);
+
+        document.getElementById('coin').onclick = (e) => {
+            score += mult; draw();
+            let p = document.createElement('div'); p.className = 'plus'; p.innerText = '+' + mult;
+            p.style.left = e.pageX + 'px'; p.style.top = e.pageY + 'px';
+            document.body.appendChild(p); setTimeout(() => p.remove(), 600);
+            if(score % 5 === 0) save();
+        };
+
+        function save() {
+            fetch('/s', { method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id, score: Math.floor(score), mult: mult, auto: auto})
+            });
+        }
+
+        function showS() { let c = mult * 200; openM("🛒 МАГАЗИН", `Улучшить клик до +${mult+1}<br>Цена: ${c} 🪙<br><br><div class="btn" style="width:100%" onclick="buyM(${c})">КУПИТЬ</div>`); }
+        function buyM(c) { if(score >= c) { score -= c; mult++; save(); draw(); closeM(); } else { alert("Мало монет!"); } }
+        function buyA() { let c = (auto + 1) * 500; if(score >= c) { score -= c; auto++; save(); draw(); alert("Майнер +1/с!"); } else { alert("Мало монет!"); } }
+        function showT() { fetch('/top').then(r => r.json()).then(d => { openM("🏆 ТОП-10", d.map((l, i) => `${i+1}. ID ${l.id}: ${l.s}`).join('<br>')); }); }
+        function showR() { openM("👥 ДРУЗЬЯ", `Твой ID: ${id}<br>Приглашай друзей по ссылке бота!`); }
+        function openM(t, h) { document.getElementById('mt').innerText = t; document.getElementById('ml').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
         function closeM() { document.getElementById('modal').style.display = 'none'; }
     </script>
 </body>
