@@ -3,7 +3,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandObject, Command
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -12,22 +11,29 @@ from sqlalchemy import Column, BigInteger, Integer, select
 # --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-DATABASE_URL = os.getenv("DATABASE_URL_FIXED")
-
 logging.basicConfig(level=logging.INFO)
+
+# --- ЖЕСТКАЯ ОЧИСТКА ССЫЛКИ ИЗ ENVIRONMENT ---
+raw_url = os.getenv("DATABASE_URL_FIXED", "")
+
+# 1. Убираем "://", которые лезут после "@"
+# 2. Убираем лишние пробелы
+# 3. Добавляем имя базы fenix_tap, если его нет в конце
+clean_url = raw_url.replace("@://", "@").strip()
+
+if clean_url and not clean_url.endswith("/fenix_tap"):
+    clean_url = clean_url.rstrip("/") + "/fenix_tap"
+
+# Проверка: если в ссылке все еще нет asyncpg, добавляем его
+if clean_url.startswith("postgresql://"):
+    clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://")
+
+logging.info(f"Использую очищенную ссылку: {clean_url}")
+
+# --- БАЗА ДАННЫХ ---
 Base = declarative_base()
-app = FastAPI()
-
-# Разрешаем запросы (CORS), чтобы index.html видел сервер
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# Безопасное подключение к базе
-if DATABASE_URL:
-    clean_url = DATABASE_URL.replace("@://", "@").strip()
-    engine = create_async_engine(clean_url, pool_pre_ping=True)
-    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-else:
-    logging.error("DATABASE_URL_FIXED NOT FOUND!")
+engine = create_async_engine(clean_url, pool_pre_ping=True)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
     __tablename__ = "users"
@@ -36,20 +42,24 @@ class User(Base):
     mult = Column(Integer, default=1)
     auto_rate = Column(Integer, default=0)
 
+@app_on_event = FastAPI() # Заглушка для декоратора в зависимости от версии
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
 @app.on_event("startup")
 async def startup():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-        logging.info("🚀 FENIX SYSTEM ONLINE")
+        logging.info("🔥 СИСТЕМА FENIX ОЧИЩЕНА И ЗАПУЩЕНА")
     except Exception as e:
-        logging.error(f"Startup error: {e}")
+        logging.error(f"Ошибка БД: {e}")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# API для фронтенда
+# --- API ---
 @app.get("/", response_class=HTMLResponse)
 async def index():
     with open("index.html", "r", encoding="utf-8") as f: return f.read()
@@ -59,7 +69,7 @@ async def get_user(user_id: int):
     async with async_session() as session:
         user = await session.get(User, user_id)
         if not user: return {"score": 0, "mult": 1, "auto": 0}
-        return {"score": user.score, "mult": user.mult, "auto": user.auto_rate}
+        return {"score": int(user.score), "mult": int(user.mult), "auto": int(user.auto_rate)}
 
 @app.post("/update_score")
 async def update_score(data: dict):
@@ -85,7 +95,7 @@ async def webhook(request: Request):
     await dp.feed_update(bot, update)
     return {"ok": True}
 
-@dp.message(Command("start"))
+@dp.message()
 async def start(m: types.Message):
     await m.answer("Добро пожаловать в Fenix Tap!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
