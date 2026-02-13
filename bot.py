@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,7 +11,7 @@ from sqlalchemy import Column, BigInteger, Integer
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-# Ссылка очищена от лишних двоеточий и портов для стабильной работы
+# Добавлен параметр ssl для Render
 DATABASE_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
 
 logging.basicConfig(level=logging.INFO)
@@ -32,36 +33,38 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup():
-    async with engine.begin() as conn:
-        # Исправленный вызов создания таблиц
-        await conn.run_sync(Base.metadata.create_all)
-    await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-    logging.info("Система Fenix Tap запущена и база подключена!")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
+        logging.info("Успешный запуск!")
+    except Exception as e:
+        logging.error(f"Ошибка при запуске: {e}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    update = types.Update.model_validate(await request.json(), context={"bot": bot})
-    await dp.feed_update(bot, update)
+    try:
+        data = await request.json()
+        update = types.Update.model_validate(data, context={"bot": bot})
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        logging.error(f"Ошибка вебхука: {e}")
+    return {"ok": True}
 
 @dp.message()
 async def start_handler(message: types.Message):
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔥 НАЧАТЬ ТАПАТЬ 🔥", web_app=WebAppInfo(url=BASE_URL))]
+        [InlineKeyboardButton(text="🔥 ИГРАТЬ 🔥", web_app=WebAppInfo(url=BASE_URL))]
     ])
-    await message.answer(
-        f"Привет, {message.from_user.first_name}! Твои клики теперь сохраняются вечно.", 
-        reply_markup=markup
-    )
+    await message.answer(f"Привет! Твой счет сохраняется в базе.", reply_markup=markup)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    try:
+    if os.path.exists("index.html"):
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
-    except Exception as e:
-        return f"<h1>Ошибка загрузки игры: {e}</h1>"
+    return "<h1>Файл index.html не найден</h1>"
 
-# --- API ДЛЯ СВЯЗИ С ИГРОЙ ---
 @app.get("/get_user/{user_id}")
 async def get_user(user_id: int):
     async with async_session() as session:
