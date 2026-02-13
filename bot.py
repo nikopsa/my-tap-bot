@@ -1,34 +1,24 @@
-import asyncio, random, os
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiohttp import web
+import telebot
+from telebot import types
 
-TOKEN = '8377110375:AAEMr2VfEfrXGOvKAxexADGOrDfVcEQH7Mk'
-PORT = int(os.environ.get("PORT", 10000)) # Render сам даст нужный порт
+# Твой новый токен
+TOKEN = '8377110375:AAHm15GWZEY4nmeRkFOqUEUToH_9NwcjMdE'
+bot = telebot.TeleBot(TOKEN)
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-
-async def handle(request): return web.Response(text="Bot is running")
-
-@dp.message(Command("start"))
-async def s(m: types.Message):
-    ver = random.randint(1, 99999)
-    url = f'https://nikopsa.github.io{ver}' 
-    kb = [[types.KeyboardButton(text="ИГРАТЬ 💰", web_app=types.WebAppInfo(url=url))]]
-    await m.answer("Жми кнопку!", reply_markup=types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
-
-async def main():
-    # Запускаем микро-сервер, чтобы Render не ругался
-    app = web.Application()
-    app.router.add_get('/', handle)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
-    await site.start()
+@bot.message_handler(commands=['start'])
+def start(message):
+    # Создаем кнопку для запуска Mini App
+    markup = types.InlineKeyboardMarkup()
     
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # ВНИМАНИЕ: Замени ссылку ниже на свою, если у тебя есть сайт. 
+    # Пока я ставлю заглушку, чтобы ты увидел, как это работает.
+    web_app = types.WebAppInfo("https://yandex.ru") 
+    
+    btn = types.InlineKeyboardButton("🚀 Запустить SuPer-KLikEr", web_app=web_app)
+    markup.add(btn)
+    
+    bot.send_message(
+        message.chat.id, 
+        f"Привет, {message.from_user.first_name}!\nНажимай кнопку ниже, чтобы начать игру:", 
+        reply_markup=markup
+    )
