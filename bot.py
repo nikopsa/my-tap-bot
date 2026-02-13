@@ -1,4 +1,5 @@
-import logging, os
+import logging
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
@@ -13,22 +14,16 @@ TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
 logging.basicConfig(level=logging.INFO)
 
-# --- ЖЕСТКАЯ ОЧИСТКА ССЫЛКИ ИЗ ENVIRONMENT ---
+# --- ЖЕСТКАЯ ОЧИСТКА ССЫЛКИ ---
 raw_url = os.getenv("DATABASE_URL_FIXED", "")
-
-# 1. Убираем "://", которые лезут после "@"
-# 2. Убираем лишние пробелы
-# 3. Добавляем имя базы fenix_tap, если его нет в конце
+# Убираем @:// -> @ и чистим пробелы
 clean_url = raw_url.replace("@://", "@").strip()
-
-if clean_url and not clean_url.endswith("/fenix_tap"):
-    clean_url = clean_url.rstrip("/") + "/fenix_tap"
-
-# Проверка: если в ссылке все еще нет asyncpg, добавляем его
+# Добавляем драйвер asyncpg, если его нет
 if clean_url.startswith("postgresql://"):
     clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://")
-
-logging.info(f"Использую очищенную ссылку: {clean_url}")
+# Добавляем имя базы в конец
+if clean_url and not clean_url.endswith("/fenix_tap"):
+    clean_url = clean_url.rstrip("/") + "/fenix_tap"
 
 # --- БАЗА ДАННЫХ ---
 Base = declarative_base()
@@ -42,9 +37,12 @@ class User(Base):
     mult = Column(Integer, default=1)
     auto_rate = Column(Integer, default=0)
 
-@app_on_event = FastAPI() # Заглушка для декоратора в зависимости от версии
+# --- ПРИЛОЖЕНИЕ ---
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
 @app.on_event("startup")
 async def startup():
@@ -52,17 +50,14 @@ async def startup():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-        logging.info("🔥 СИСТЕМА FENIX ОЧИЩЕНА И ЗАПУЩЕНА")
+        logging.info("🔥 FENIX SYSTEM ONLINE")
     except Exception as e:
-        logging.error(f"Ошибка БД: {e}")
+        logging.error(f"ОШИБКА БАЗЫ: {e}")
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-
-# --- API ---
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f: return f.read()
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 @app.get("/get_user/{user_id}")
 async def get_user(user_id: int):
