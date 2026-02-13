@@ -1,94 +1,75 @@
-import logging, os
+import os, logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandObject, Command
-from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, BigInteger, Integer, select
 
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
-BASE_URL = "https://my-tap-bot.onrender.com"
-DATABASE_URL = os.getenv("DATABASE_URL_FIXED")
+URL = "https://my-tap-bot.onrender.com"
+DB_URL = os.getenv("DATABASE_URL_FIXED").replace("@://", "@")
 
 logging.basicConfig(level=logging.INFO)
 Base = declarative_base()
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Вычищаем ссылку до блеска
-raw_url = DATABASE_URL if DATABASE_URL else ""
-clean_url = raw_url.replace("@://", "@").replace(":@", "@").strip()
-if clean_url and not clean_url.endswith("/fenix_tap"):
-    clean_url = clean_url.rstrip("/") + "/fenix_tap"
-if clean_url.startswith("postgresql://") and "asyncpg" not in clean_url:
-    clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://")
-
-engine = create_async_engine(clean_url, pool_pre_ping=True)
-async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+engine = create_async_engine(DB_URL.replace("postgresql://", "postgresql+asyncpg://"))
+Session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 class User(Base):
     __tablename__ = "users"
-    user_id = Column(BigInteger, primary_key=True)
+    id = Column(BigInteger, primary_key=True)
     score = Column(Integer, default=0)
     mult = Column(Integer, default=1)
-    auto_rate = Column(Integer, default=0)
+    auto = Column(Integer, default=0)
+
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+bot = Bot(TOKEN)
+dp = Dispatcher()
 
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-    logging.info("FENIX SYSTEM ONLINE")
-
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+    await bot.set_webhook(f"{URL}/webhook")
 
 @app.get("/")
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f: return HTMLResponse(f.read())
+    return types.responses.HTMLResponse(open("index.html", encoding="utf-8").read())
 
-@app.get("/get_user/{user_id}")
-async def get_user(user_id: int):
-    async with async_session() as session:
-        user = await session.get(User, user_id)
-        if not user: return {"score": 0, "mult": 1, "auto": 0}
-        return {"score": int(user.score), "mult": int(user.mult), "auto": int(user.auto_rate)}
+@app.get("/u/{uid}")
+async def get_u(uid: int):
+    async with Session() as s:
+        u = await s.get(User, uid)
+        if not u:
+            u = User(id=uid)
+            s.add(u)
+            await s.commit()
+        return {"score": u.score, "mult": u.mult, "auto": u.auto}
 
-@app.post("/update_score")
-async def update_score(data: dict):
-    async with async_session() as session:
-        user = await session.get(User, data['user_id'])
-        if user:
-            user.score = int(data['score'])
-            user.mult = int(data.get('mult', user.mult))
-            user.auto_rate = int(data.get('auto', user.auto_rate))
-            await session.commit()
-    return {"status": "ok"}
-
-@app.get("/get_leaders")
-async def get_leaders():
-    async with async_session() as session:
-        res = await session.execute(select(User).order_by(User.score.desc()).limit(10))
-        return [{"id": str(l.user_id)[:5], "score": l.score} for l in res.scalars().all()]
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    update = types.Update.model_validate(await request.json(), context={"bot": bot})
-    await dp.feed_update(bot, update)
+@app.post("/s")
+async def save(d: dict):
+    async with Session() as s:
+        u = await s.get(User, d['id'])
+        if u:
+            u.score, u.mult, u.auto = int(d['score']), int(d['mult']), int(d['auto'])
+            await s.commit()
     return {"ok": True}
 
-@dp.message(Command("start"))
-async def start(m: types.Message):
-    await m.answer("SuPerKLikEr готов!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
-    ]))
+@app.get("/top")
+async def top():
+    async with Session() as s:
+        res = await s.execute(select(User).order_by(User.score.desc()).limit(10))
+        return [{"id": l.id, "s": l.score} for l in res.scalars().all()]
+
+@app.post("/webhook")
+async def wh(r: Request):
+    upd = types.Update.model_validate(await r.json(), context={"bot": bot})
+    await dp.feed_update(bot, upd)
+    return {"ok": True}
+
+@dp.message()
+async def st(m: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 SuPerKLikEr", web_app=WebAppInfo(url=URL))]])
+    await m.answer("🔥 Время тапать!",
