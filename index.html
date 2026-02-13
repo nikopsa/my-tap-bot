@@ -1,42 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Fenix Tap</title>
     <script src="https://telegram.org"></script>
     <style>
-        body { background: #000; color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .coin { width: 200px; height: 200px; background: orange; border-radius: 50%; border: 10px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; user-select: none; transition: transform 0.1s; }
-        .coin:active { transform: scale(0.9); }
-        #score { font-size: 50px; margin-bottom: 20px; }
+        body { 
+            background: radial-gradient(circle, #2c3e50, #000); 
+            color: gold; 
+            text-align: center; 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden;
+        }
+        #score { 
+            font-size: 60px; 
+            font-weight: bold; 
+            margin-bottom: 20px; 
+            text-shadow: 0 0 20px gold; 
+        }
+        .coin { 
+            width: 220px; 
+            height: 220px; 
+            background: linear-gradient(45deg, #f1c40f, #f39c12); 
+            border-radius: 50%; 
+            border: 10px solid #d35400; 
+            font-size: 80px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            cursor: pointer; 
+            user-select: none; 
+            transition: transform 0.05s;
+            box-shadow: 0 0 40px rgba(241, 196, 15, 0.5);
+        }
+        .coin:active { transform: scale(0.92); }
+        .label { margin-top: 20px; letter-spacing: 2px; color: white; opacity: 0.7; }
     </style>
 </head>
 <body>
+
     <div id="score">Загрузка...</div>
-    <div class="coin" onclick="tap()">🔥</div>
+    <div class="coin" id="coin" onclick="handleTap()">🔥</div>
+    <div class="label">FENIX TAPPER</div>
 
     <script>
         let tg = window.Telegram.WebApp;
+        tg.expand(); 
+
         let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
         let count = 0;
+        const scoreElement = document.getElementById('score');
 
-        // Загружаем счет из базы при входе
+        // 1. Загружаем счет из базы при входе
         fetch(`/get_user/${userId}`)
             .then(res => res.json())
             .then(data => {
-                count = data.score;
-                document.getElementById('score').innerText = count;
+                count = data.score || 0;
+                scoreElement.innerText = count;
+            })
+            .catch(err => {
+                console.error("Ошибка загрузки:", err);
+                scoreElement.innerText = 0;
             });
 
-        function tap() {
+        // 2. Функция тапа
+        function handleTap() {
             count++;
-            document.getElementById('score').innerText = count;
-            tg.HapticFeedback.impactOccurred('medium');
+            scoreElement.innerText = count;
+            
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('medium');
+            }
 
-            // Отправляем счет в базу (каждые 5 кликов или при закрытии)
-            if (count % 5 === 0) { saveScore(); }
+            // Сохраняем в базу каждые 5 кликов
+            if (count % 5 === 0) { 
+                saveScore(); 
+            }
         }
 
+        // 3. Функция сохранения
         function saveScore() {
             fetch('/update_score', {
                 method: 'POST',
@@ -44,8 +93,10 @@
                 body: JSON.stringify({user_id: userId, score: count})
             });
         }
-        
-        tg.onEvent('viewportChanged', saveScore); // Сохранить при закрытии
+
+        // Сохраняем при закрытии или скрытии приложения
+        tg.onEvent('viewportChanged', saveScore);
+        window.addEventListener('beforeunload', saveScore);
     </script>
 </body>
 </html>
