@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, BigInteger, Integer, select
 
-# --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
 DATABASE_URL = os.getenv("DATABASE_URL_FIXED")
@@ -18,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 Base = declarative_base()
 app = FastAPI()
 
-# ЖЕСТКИЙ CORS (Разрешаем всё, чтобы кнопки ожили)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,11 +25,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Очистка ссылки базы
-clean_url = DATABASE_URL.replace("@://", "@").strip() if DATABASE_URL else ""
+# Вычищаем ссылку до блеска
+raw_url = DATABASE_URL if DATABASE_URL else ""
+clean_url = raw_url.replace("@://", "@").replace(":@", "@").strip()
 if clean_url and not clean_url.endswith("/fenix_tap"):
     clean_url = clean_url.rstrip("/") + "/fenix_tap"
-if clean_url.startswith("postgresql://"):
+if clean_url.startswith("postgresql://") and "asyncpg" not in clean_url:
     clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://")
 
 engine = create_async_engine(clean_url, pool_pre_ping=True)
@@ -49,7 +48,7 @@ async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-    logging.info("🚀 FENIX SYSTEM ONLINE")
+    logging.info("FENIX SYSTEM ONLINE")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -90,6 +89,6 @@ async def webhook(request: Request):
 
 @dp.message(Command("start"))
 async def start(m: types.Message):
-    await m.answer("Добро пожаловать!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+    await m.answer("SuPerKLikEr готов!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
     ]))
