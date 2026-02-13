@@ -1,53 +1,38 @@
 import os
-import telebot
-from telebot import types
-from flask import Flask
-from threading import Thread
+from fastapi import FastAPI, Request
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
+from fastapi.responses import HTMLResponse
 
-# --- 1. ОБМАНКА ДЛЯ RENDER ---
-app = Flask('')
+# Данные твоего бота
+TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
+BASE_URL = "https://my-tap-bot.onrender.com"
 
-@app.route('/')
-def home():
-    return "SuPerKLikEr is alive!"
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+app = FastAPI()
 
-def run():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+# Ответ бота на любое сообщение: присылает кнопку игры
+@dp.message()
+async def send_game_button(message: types.Message):
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Начать тапать! 🔥", web_app=WebAppInfo(url=BASE_URL))]
+    ])
+    await message.answer("Привет! Нажимай на кнопку и заходи в игру:", reply_markup=markup)
 
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
+# Прием обновлений от Telegram (Webhook)
+@app.post("/webhook")
+async def handle_webhook(request: Request):
+    update = types.Update.model_validate(await request.json(), context={"bot": bot})
+    await dp.feed_update(bot, update)
 
-# --- 2. НАСТРОЙКА БОТА ---
-# Твой актуальный токен
-TOKEN = '8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg'
-bot = telebot.TeleBot(TOKEN)
+# Установка связи с Telegram при запуске
+@app.on_event("startup")
+async def on_startup():
+    await bot.set_webhook(f"{BASE_URL}/webhook")
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    markup = types.InlineKeyboardMarkup()
-    
-    # Ссылка на игру (БЕЗ ДЕФИСА, если ты сменил название репозитория)
-    # Если репозиторий на GitHub всё еще называется "my-tap-bot", оставь ссылку как есть
-    game_url = "https://nikopsa.github.io"
-    
-    web_app = types.WebAppInfo(game_url)
-    btn = types.InlineKeyboardButton("🚀 ИГРАТЬ В SUPERKLIKER", web_app=web_app)
-    markup.add(btn)
-    
-    bot.send_message(
-        message.chat.id, 
-        f"Привет, {message.from_user.first_name}!\n\nДобро пожаловать в SuPerKLikEr. Жми кнопку ниже:", 
-        reply_markup=markup
-    )
-
-# --- 3. ЗАПУСК ---
-if __name__ == '__main__':
-    keep_alive()
-    print("Бот SuPerKLikEr запущен!")
-    try:
-        bot.polling(none_stop=True, skip_pending=True)
-    except Exception as e:
-        print(f"Ошибка: {e}")
+# Отдача страницы с игрой (самый простой вариант)
+@app.get("/", response_class=HTMLResponse)
+async def game_page():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
