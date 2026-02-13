@@ -7,10 +7,19 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, BigInteger, Integer, select
 
-# Настройки
+# --- ДАННЫЕ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 URL = "https://my-tap-bot.onrender.com"
-DB_URL = os.getenv("DATABASE_URL_FIXED").replace("@://", "@").replace("postgresql://", "postgresql+asyncpg://")
+
+# ГАРАНТИРОВАННАЯ ОЧИСТКА ССЫЛКИ
+raw_db = os.getenv("DATABASE_URL_FIXED", "")
+clean_db = raw_db.replace("@://", "@").replace("postgresql://", "postgresql+asyncpg://").strip()
+
+# ПРИНУДИТЕЛЬНОЕ ИМЯ БАЗЫ (чтобы не было ошибки fenix_tap_user)
+if not clean_db.endswith("/fenix_tap"):
+    DB_URL = clean_db.split('?')[0].rstrip('/') + "/fenix_tap"
+else:
+    DB_URL = clean_db
 
 logging.basicConfig(level=logging.INFO)
 Base = declarative_base()
@@ -34,6 +43,7 @@ async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await bot.set_webhook(f"{URL}/webhook")
+    logging.info("FENIX_TAP_LOADED_SUCCESSFULLY")
 
 @app.get("/")
 async def index():
@@ -65,7 +75,7 @@ async def save(request: Request):
 async def top():
     async with Session() as s:
         res = await s.execute(select(User).order_by(User.score.desc()).limit(10))
-        return [{"id": str(l.id), "s": l.score} for l in res.scalars().all()]
+        return [{"id": l.id, "s": l.score} for l in res.scalars().all()]
 
 @app.post("/webhook")
 async def wh(r: Request):
@@ -75,5 +85,5 @@ async def wh(r: Request):
 
 @dp.message()
 async def st(m: types.Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=URL))]])
-    await m.answer("SuPerKLikEr", reply_markup=kb)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 SuPerKLikEr", web_app=WebAppInfo(url=URL))]])
+    await m.answer("Жми кнопку и тапай!", reply_markup=kb)
