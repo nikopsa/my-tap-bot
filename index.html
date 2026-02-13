@@ -1,159 +1,60 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            background: radial-gradient(circle, #2c3e50, #000); 
-            color: gold; text-align: center; font-family: sans-serif; 
-            display: flex; flex-direction: column; justify-content: space-between; 
-            height: 100vh; overflow: hidden; user-select: none; -webkit-tap-highlight-color: transparent;
-        }
-        .top-nav, .bottom-nav { display: flex; justify-content: space-around; width: 100%; padding: 15px 0; z-index: 10; }
-        #score { font-size: 55px; font-weight: bold; text-shadow: 0 0 15px gold; margin-top: 10px; }
-        #auto-info { font-size: 14px; color: #fff; opacity: 0.6; }
+        body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between; height: 100vh; overflow: hidden; user-select: none; }
+        .nav { display: flex; justify-content: space-around; width: 100%; padding: 15px 0; }
+        #score { font-size: 55px; font-weight: bold; text-shadow: 0 0 15px gold; }
         .coin-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; }
-        .coin { 
-            width: 230px; height: 230px; background: orange; border-radius: 50%; 
-            border: 10px solid gold; font-size: 90px; display: flex; 
-            justify-content: center; align-items: center; cursor: pointer; 
-            transition: transform 0.05s; box-shadow: 0 0 35px orange;
-        }
+        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 8px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 35px orange; }
         .coin:active { transform: scale(0.92); }
-        .btn { 
-            width: 44%; padding: 12px; background: rgba(255, 215, 0, 0.15); 
-            color: gold; border: 1px solid gold; border-radius: 15px; 
-            font-weight: bold; cursor: pointer; font-size: 14px; backdrop-filter: blur(5px);
-        }
-        #modal { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; 
-            height: 100%; background: rgba(0,0,0,0.96); z-index: 100; padding-top: 40px; 
-        }
-        .plus-one { 
-            position: absolute; color: #fff; font-size: 32px; font-weight: bold; 
-            animation: moveUp 0.6s forwards; pointer-events: none; 
-        }
+        .btn { width: 44%; padding: 12px; background: rgba(255, 215, 0, 0.15); color: gold; border: 1px solid gold; border-radius: 15px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); z-index: 100; padding-top: 40px; }
+        .plus-one { position: absolute; color: #fff; font-size: 32px; font-weight: bold; animation: moveUp 0.6s forwards; pointer-events: none; }
         @keyframes moveUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-130px); } }
     </style>
 </head>
 <body>
-    <div class="top-nav">
+    <div class="nav">
         <div class="btn" onclick="showLeaders();">🏆 ТОП</div>
         <div class="btn" onclick="showFriends();">👥 ДРУЗЬЯ</div>
     </div>
-
     <div>
         <div id="score">0</div>
-        <div id="auto-info">Загрузка...</div>
+        <div id="info">SuPerKLikEr</div>
     </div>
-
     <div class="coin-container">
         <div class="coin" id="coin">🔥</div>
     </div>
-    
-    <div class="bottom-nav">
+    <div class="nav">
         <div class="btn" onclick="showShop();">🛒 МАГАЗИН</div>
         <div class="btn" onclick="buyAuto();">⚙️ МАЙНЕР</div>
     </div>
-
     <div id="modal">
-        <h2 id="m-title" style="color:gold; margin-bottom:20px;"></h2>
-        <div id="m-list" style="padding: 20px; color: white; font-size: 18px;"></div>
+        <h2 id="m-title" style="color:gold;"></h2>
+        <div id="m-list" style="padding: 20px; color: white;"></div>
         <div class="btn" style="width: 60%; margin: 20px auto;" onclick="closeM();">ЗАКРЫТЬ</div>
     </div>
-
     <script>
-        let tg = window.Telegram.WebApp;
-        if (tg) { tg.expand(); tg.ready(); }
-
-        let userId = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 12345;
+        let tg = window.Telegram.WebApp; tg.expand();
+        let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
         let count = 0, mult = 1, autoRate = 0;
-
-        function updateUI() {
-            document.getElementById('score').innerText = Math.floor(count);
-            document.getElementById('auto-info').innerText = `Клик: +${mult} | Майнинг: ${autoRate}/сек`;
-        }
-
-        fetch('/get_user/' + userId)
-            .then(r => r.json())
-            .then(d => {
-                count = Number(d.score) || 0;
-                mult = Number(d.mult) || 1;
-                autoRate = Number(d.auto) || 0;
-                updateUI();
-            }).catch(() => { updateUI(); });
-
-        setInterval(() => {
-            if (autoRate > 0) {
-                count += autoRate;
-                updateUI();
-                if (Math.random() > 0.8) save();
-            }
-        }, 1000);
-
-        const handleTap = (e) => {
-            if (e.type === 'touchstart') e.preventDefault();
-            count += mult;
-            updateUI();
-            let pos = e.touches ? e.touches[0] : e;
-            let p = document.createElement('div');
-            p.className = 'plus-one';
-            p.innerText = '+' + mult;
-            p.style.left = pos.pageX + 'px';
-            p.style.top = pos.pageY + 'px';
-            document.body.appendChild(p);
-            setTimeout(() => p.remove(), 600);
-            if (count % 10 === 0) save();
-        };
-
-        const coin = document.getElementById('coin');
-        coin.addEventListener('touchstart', handleTap);
-        coin.addEventListener('mousedown', handleTap);
-
-        function save() {
-            fetch('/update_score', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, score: Math.floor(count), mult: mult, auto: autoRate})
-            });
-        }
-
-        function showShop() {
-            let cost = mult * 250;
-            openM("🛒 МАГАЗИН", `Клик до +${mult+1}<br>Цена: <b>${cost}</b><br><br><div class="btn" style="width:80%;margin:auto;" onclick="buyMult(${cost});">КУПИТЬ</div>`);
-        }
-
-        function buyMult(cost) {
-            if (count >= cost) { count -= cost; mult++; updateUI(); save(); closeM(); } 
-            else { alert("Мало монет!"); }
-        }
-
-        function buyAuto() {
-            let cost = (autoRate + 1) * 600;
-            if (count >= cost) { count -= cost; autoRate++; updateUI(); save(); alert("Майнер +1/сек"); } 
-            else { alert("Нужно " + cost); }
-        }
-
-        function showLeaders() {
-            openM("🏆 ТОП", "Загрузка...");
-            fetch('/get_leaders').then(r => r.json()).then(data => {
-                document.getElementById('m-list').innerHTML = data.map((l, i) => `${i+1}. ID ${l.id}: <b>${l.score}</b>`).join('<br>');
-            });
-        }
-
-        function showFriends() {
-            let link = "https://t.me" + userId;
-            openM("👥 ДРУЗЬЯ", `Бонус 500<br><br><input readonly value="${link}" style="width:90%; padding:10px; background:#222; color:#fff; border:1px solid gold; border-radius:10px;"><br><br><div class="btn" style="width:80%;margin:auto;" onclick="alert('Скопировано');">ССЫЛКА</div>`);
-        }
-
-        function openM(t, h) {
-            document.getElementById('m-title').innerText = t;
-            document.getElementById('m-list').innerHTML = h;
-            document.getElementById('modal').style.display = 'block';
-        }
+        function updateUI() { document.getElementById('score').innerText = Math.floor(count); document.getElementById('info').innerText = `Клик: +${mult} | Авто: ${autoRate}/с`; }
+        fetch('/get_user/' + userId).then(r => r.json()).then(d => { count = Number(d.score) || 0; mult = Number(d.mult) || 1; autoRate = Number(d.auto) || 0; updateUI(); }).catch(() => updateUI());
+        setInterval(() => { if (autoRate > 0) { count += autoRate; updateUI(); if (Math.random() > 0.8) save(); } }, 1000);
+        const handleTap = (e) => { e.preventDefault(); count += mult; updateUI(); let pos = e.touches ? e.touches[0] : e; let p = document.createElement('div'); p.className = 'plus-one'; p.innerText = '+' + mult; p.style.left = pos.pageX + 'px'; p.style.top = pos.pageY + 'px'; document.body.appendChild(p); setTimeout(() => p.remove(), 600); if (count % 10 === 0) save(); };
+        const coin = document.getElementById('coin'); coin.addEventListener('touchstart', handleTap); coin.addEventListener('mousedown', handleTap);
+        function save() { fetch('/update_score', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_id: userId, score: Math.floor(count), mult: mult, auto: autoRate}) }); }
+        function showShop() { openM("МАГАЗИН", `Клик +1 (Цена: ${mult * 250})<br><br><div class="btn" style="width:100%" onclick="buyMult();">КУПИТЬ</div>`); }
+        function buyMult() { let c = mult * 250; if (count >= c) { count -= c; mult++; save(); updateUI(); closeM(); } else { alert("Мало!"); } }
+        function buyAuto() { let c = (autoRate + 1) * 600; if (count >= c) { count -= c; autoRate++; save(); updateUI(); } else { alert("Мало!"); } }
+        function showLeaders() { openM("ТОП", "Загрузка..."); fetch('/get_leaders').then(r => r.json()).then(d => { document.getElementById('m-list').innerHTML = d.map(l => `${l.id}: ${l.score}`).join('<br>'); }); }
+        function showFriends() { openM("ДРУЗЬЯ", `ID: ${userId}<br>https://t.me{userId}`); }
+        function openM(t, h) { document.getElementById('m-title').innerText = t; document.getElementById('m-list').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
         function closeM() { document.getElementById('modal').style.display = 'none'; }
     </script>
 </body>
