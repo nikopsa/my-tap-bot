@@ -12,18 +12,20 @@ from sqlalchemy import Column, BigInteger, Integer
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
 
-# Берем ссылку из переменных окружения (это исправит ошибку с портом)
+# Берем ссылку из настроек Render (Environment Variables)
 DATABASE_URL = os.getenv("DATABASE_URL_FIXED")
 
 logging.basicConfig(level=logging.INFO)
 Base = declarative_base()
 
-# Проверка: если переменная не задана, бот напишет об этом в логах
-if DATABASE_URL:
-    engine = create_async_engine(DATABASE_URL)
-    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-else:
-    logging.error("DATABASE_URL_FIXED НЕ ЗАДАНА В НАСТРОЙКАХ RENDER!")
+# Проверка подключения
+if not DATABASE_URL:
+    logging.error("DATABASE_URL_FIXED не найдена! Проверь вкладку Environment в Render.")
+    # Заглушка, чтобы сервер не падал при деплое без переменной
+    DATABASE_URL = "sqlite+aiosqlite:///temp.db" 
+
+engine = create_async_engine(DATABASE_URL, echo=False)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
     __tablename__ = "users"
@@ -36,11 +38,13 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup():
-    if DATABASE_URL:
+    try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-    logging.info("🚀 БОТ ЗАПУЩЕН")
+        await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
+        logging.info("🚀 FENIX SYSTEM ONLINE")
+    except Exception as e:
+        logging.error(f"Startup Error: {e}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -52,9 +56,9 @@ async def webhook(request: Request):
 @dp.message()
 async def start_handler(message: types.Message):
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
+        [InlineKeyboardButton(text="🔥 ИГРАТЬ (FENIX TAP) 🔥", web_app=WebAppInfo(url=BASE_URL))]
     ])
-    await message.answer("Твой счет сохраняется!", reply_markup=markup)
+    await message.answer(f"Привет, {message.from_user.first_name}! Твой прогресс сохраняется.", reply_markup=markup)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
