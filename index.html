@@ -8,95 +8,71 @@
     <style>
         body { 
             background: radial-gradient(circle, #2c3e50, #000); 
-            color: gold; 
-            text-align: center; 
-            font-family: sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            margin: 0; 
-            overflow: hidden;
+            color: gold; text-align: center; font-family: sans-serif; 
+            display: flex; flex-direction: column; justify-content: center; 
+            align-items: center; height: 100vh; margin: 0; overflow: hidden;
+            user-select: none; -webkit-tap-highlight-color: transparent;
         }
-        #score { 
-            font-size: 60px; 
-            font-weight: bold; 
-            margin-bottom: 20px; 
-            text-shadow: 0 0 20px gold; 
-        }
+        #score { font-size: 60px; font-weight: bold; margin-bottom: 20px; text-shadow: 0 0 20px gold; }
         .coin { 
-            width: 220px; 
-            height: 220px; 
+            width: 240px; height: 240px; 
             background: linear-gradient(45deg, #f1c40f, #f39c12); 
-            border-radius: 50%; 
-            border: 10px solid #d35400; 
-            font-size: 80px; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            cursor: pointer; 
-            user-select: none; 
-            transition: transform 0.05s;
+            border-radius: 50%; border: 10px solid #d35400; 
+            font-size: 90px; display: flex; justify-content: center; 
+            align-items: center; cursor: pointer; transition: transform 0.05s;
             box-shadow: 0 0 40px rgba(241, 196, 15, 0.5);
         }
         .coin:active { transform: scale(0.92); }
-        .label { margin-top: 20px; letter-spacing: 2px; color: white; opacity: 0.7; }
+        .plus-one {
+            position: absolute; color: #fff; font-size: 30px; font-weight: bold;
+            animation: moveUp 0.7s ease-out forwards; pointer-events: none;
+        }
+        @keyframes moveUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-120px); }
+        }
     </style>
 </head>
 <body>
-
-    <div id="score">Загрузка...</div>
-    <div class="coin" id="coin" onclick="handleTap()">🔥</div>
-    <div class="label">FENIX TAPPER</div>
+    <div id="score">...</div>
+    <div class="coin" id="coin">🔥</div>
 
     <script>
         let tg = window.Telegram.WebApp;
-        tg.expand(); 
-
-        let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
+        tg.expand();
+        let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123456;
         let count = 0;
-        const scoreElement = document.getElementById('score');
+        const scoreEl = document.getElementById('score');
 
-        // 1. Загружаем счет из базы при входе
-        fetch(`/get_user/${userId}`)
-            .then(res => res.json())
-            .then(data => {
-                count = data.score || 0;
-                scoreElement.innerText = count;
-            })
-            .catch(err => {
-                console.error("Ошибка загрузки:", err);
-                scoreElement.innerText = 0;
-            });
+        fetch(`/get_user/${userId}`).then(r => r.json()).then(d => {
+            count = d.score || 0;
+            scoreEl.innerText = count;
+        });
 
-        // 2. Функция тапа
-        function handleTap() {
+        document.getElementById('coin').addEventListener('touchstart', (e) => {
             count++;
-            scoreElement.innerText = count;
-            
-            if (tg.HapticFeedback) {
-                tg.HapticFeedback.impactOccurred('medium');
-            }
+            scoreEl.innerText = count;
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
-            // Сохраняем в базу каждые 5 кликов
-            if (count % 5 === 0) { 
-                saveScore(); 
-            }
-        }
+            const x = e.touches[0].clientX;
+            const y = e.touches[0].clientY;
+            const p = document.createElement('div');
+            p.className = 'plus-one';
+            p.innerText = '+1';
+            p.style.left = x + 'px'; p.style.top = y + 'px';
+            document.body.appendChild(p);
+            setTimeout(() => p.remove(), 700);
 
-        // 3. Функция сохранения
-        function saveScore() {
+            if (count % 5 === 0) save();
+        });
+
+        function save() {
             fetch('/update_score', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({user_id: userId, score: count})
             });
         }
-
-        // Сохраняем при закрытии или скрытии приложения
-        tg.onEvent('viewportChanged', saveScore);
-        window.addEventListener('beforeunload', saveScore);
     </script>
 </body>
 </html>
