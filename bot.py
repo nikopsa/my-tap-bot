@@ -1,9 +1,9 @@
-import logging
-import os
+import logging, os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import CommandObject, Command
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -12,21 +12,28 @@ from sqlalchemy import Column, BigInteger, Integer, select
 # --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-logging.basicConfig(level=logging.INFO)
+DATABASE_URL = os.getenv("DATABASE_URL_FIXED")
 
-# --- ЖЕСТКАЯ ОЧИСТКА ССЫЛКИ ---
-raw_url = os.getenv("DATABASE_URL_FIXED", "")
-# Убираем @:// -> @ и чистим пробелы
-clean_url = raw_url.replace("@://", "@").strip()
-# Добавляем драйвер asyncpg, если его нет
-if clean_url.startswith("postgresql://"):
-    clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://")
-# Добавляем имя базы в конец
+logging.basicConfig(level=logging.INFO)
+Base = declarative_base()
+app = FastAPI()
+
+# ЖЕСТКИЙ CORS (Разрешаем всё, чтобы кнопки ожили)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Очистка ссылки базы
+clean_url = DATABASE_URL.replace("@://", "@").strip() if DATABASE_URL else ""
 if clean_url and not clean_url.endswith("/fenix_tap"):
     clean_url = clean_url.rstrip("/") + "/fenix_tap"
+if clean_url.startswith("postgresql://"):
+    clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://")
 
-# --- БАЗА ДАННЫХ ---
-Base = declarative_base()
 engine = create_async_engine(clean_url, pool_pre_ping=True)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -37,27 +44,19 @@ class User(Base):
     mult = Column(Integer, default=1)
     auto_rate = Column(Integer, default=0)
 
-# --- ПРИЛОЖЕНИЕ ---
-app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
+    logging.info("🚀 FENIX SYSTEM ONLINE")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-@app.on_event("startup")
-async def startup():
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-        logging.info("🔥 FENIX SYSTEM ONLINE")
-    except Exception as e:
-        logging.error(f"ОШИБКА БАЗЫ: {e}")
-
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    with open("index.html", "r", encoding="utf-8") as f: return HTMLResponse(f.read())
 
 @app.get("/get_user/{user_id}")
 async def get_user(user_id: int):
@@ -81,17 +80,16 @@ async def update_score(data: dict):
 async def get_leaders():
     async with async_session() as session:
         res = await session.execute(select(User).order_by(User.score.desc()).limit(10))
-        return [{"id": str(l.user_id)[:5]+"..", "score": l.score} for l in res.scalars().all()]
+        return [{"id": str(l.user_id)[:5], "score": l.score} for l in res.scalars().all()]
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    update = types.Update.model_validate(data, context={"bot": bot})
+    update = types.Update.model_validate(await request.json(), context={"bot": bot})
     await dp.feed_update(bot, update)
     return {"ok": True}
 
-@dp.message()
+@dp.message(Command("start"))
 async def start(m: types.Message):
-    await m.answer("Добро пожаловать в Fenix Tap!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+    await m.answer("Добро пожаловать!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
     ]))
