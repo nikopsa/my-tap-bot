@@ -11,14 +11,14 @@ from sqlalchemy import Column, BigInteger, Integer
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-# Добавлен параметр ssl для Render
-DATABASE_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
+# Ссылка без лишних знаков
+RAW_DB_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
 
 logging.basicConfig(level=logging.INFO)
 
 # --- БАЗА ДАННЫХ ---
 Base = declarative_base()
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(RAW_DB_URL, echo=False)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
@@ -37,33 +37,28 @@ async def startup():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-        logging.info("Успешный запуск!")
+        logging.info("FENIX SYSTEM ONLINE")
     except Exception as e:
-        logging.error(f"Ошибка при запуске: {e}")
+        logging.error(f"Startup Error: {e}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    try:
-        data = await request.json()
-        update = types.Update.model_validate(data, context={"bot": bot})
-        await dp.feed_update(bot, update)
-    except Exception as e:
-        logging.error(f"Ошибка вебхука: {e}")
+    data = await request.json()
+    update = types.Update.model_validate(data, context={"bot": bot})
+    await dp.feed_update(bot, update)
     return {"ok": True}
 
 @dp.message()
 async def start_handler(message: types.Message):
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔥 ИГРАТЬ 🔥", web_app=WebAppInfo(url=BASE_URL))]
+        [InlineKeyboardButton(text="🔥 ИГРАТЬ (FENIX TAP) 🔥", web_app=WebAppInfo(url=BASE_URL))]
     ])
-    await message.answer(f"Привет! Твой счет сохраняется в базе.", reply_markup=markup)
+    await message.answer(f"Привет! Твой счет сохраняется автоматически.", reply_markup=markup)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    if os.path.exists("index.html"):
-        with open("index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    return "<h1>Файл index.html не найден</h1>"
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 @app.get("/get_user/{user_id}")
 async def get_user(user_id: int):
