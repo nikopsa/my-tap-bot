@@ -5,12 +5,15 @@ from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy import Column, BigInteger, Integer, select
+from sqlalchemy import Column, BigInteger, Integer
 
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-DATABASE_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@dpg-d67h43umcj7s739dfee0-a/fenix_tap"
+# Твоя ссылка с префиксом +asyncpg
+DATABASE_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
+
+logging.basicConfig(level=logging.INFO)
 
 # --- БАЗА ДАННЫХ ---
 Base = declarative_base()
@@ -30,8 +33,10 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all())
-    await bot.set_webhook(f"{BASE_URL}/webhook")
+        # ИСПРАВЛЕНО: передаем ссылку на метод без скобок
+        await conn.run_sync(Base.metadata.create_all)
+    await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
+    logging.info("Веб-хук успешно установлен")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -43,14 +48,17 @@ async def start_handler(message: types.Message):
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔥 ИГРАТЬ 🔥", web_app=WebAppInfo(url=BASE_URL))]
     ])
-    await message.answer(f"Привет, {message.from_user.first_name}! Твой счет сохранен в базе.", reply_markup=markup)
+    await message.answer(f"Привет, {message.from_user.first_name}! Твой счет в безопасности.", reply_markup=markup)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<h1>Файл index.html не найден</h1>"
 
-# API для получения и сохранения счета из игры
+# API ДЛЯ ИГРЫ
 @app.get("/get_user/{user_id}")
 async def get_user(user_id: int):
     async with async_session() as session:
