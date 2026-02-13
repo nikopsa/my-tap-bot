@@ -1,6 +1,7 @@
 import logging
 import os
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from fastapi.responses import HTMLResponse
@@ -15,27 +16,30 @@ BASE_URL = "https://my-tap-bot.onrender.com"
 logging.basicConfig(level=logging.INFO)
 Base = declarative_base()
 app = FastAPI()
+
+# РАЗРЕШАЕМ ЗАПРОСЫ (CORS) - Чтобы цифры появились
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ЖЕСТКАЯ ОЧИСТКА ССЫЛКИ
 raw_url = os.getenv("DATABASE_URL_FIXED", "")
-# Убираем ту самую хрень "@://" и заменяем на нормальный "@"
 clean_url = raw_url.replace("@://", "@").strip()
-
-# Добавляем имя базы в конец, если его нет
 if clean_url and not clean_url.endswith("/fenix_tap"):
     clean_url = clean_url.rstrip("/") + "/fenix_tap"
 
 engine = None
 if "postgresql" in clean_url:
     try:
-        # Создаем движок из УЖЕ ЧИСТОЙ ссылки
         engine = create_async_engine(clean_url, pool_pre_ping=True)
         async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-        logging.info(f"✅ Ссылка очищена и принята")
     except Exception as e:
-        logging.error(f"❌ Ошибка в очищенной ссылке: {e}")
+        logging.error(f"DB Error: {e}")
 
 class User(Base):
     __tablename__ = "users"
@@ -45,39 +49,14 @@ class User(Base):
 @app.on_event("startup")
 async def startup():
     if engine:
-        try:
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            logging.info("✅ База данных готова к работе")
-        except Exception as e:
-            logging.error(f"❌ База не ответила: {e}")
-    
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
-    logging.info("🚀 БОТ ЗАПУЩЕН")
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except:
-        return "<h1>Загрузка игры...</h1>"
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    try:
-        data = await request.json()
-        update = types.Update.model_validate(data, context={"bot": bot})
-        await dp.feed_update(bot, update)
-    except: pass
-    return {"ok": True}
-
-@dp.message()
-async def start_handler(message: types.Message):
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
-    ])
-    await message.answer("Погнали тапать!", reply_markup=markup)
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 @app.get("/get_user/{user_id}")
 async def get_user(user_id: int):
@@ -88,15 +67,28 @@ async def get_user(user_id: int):
 
 @app.post("/update_score")
 async def update_score(data: dict):
-    if not engine: return {"status": "error"}
     user_id = data.get("user_id")
     score = data.get("score")
-    async with async_session() as session:
-        user = await session.get(User, user_id)
-        if not user:
-            user = User(user_id=user_id, score=score)
-            session.add(user)
-        else:
-            user.score = score
-        await session.commit()
+    if engine:
+        async with async_session() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                user = User(user_id=user_id, score=score)
+                session.add(user)
+            else:
+                user.score = score
+            await session.commit()
     return {"status": "ok"}
+
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+    update = types.Update.model_validate(data, context={"bot": bot})
+    await dp.feed_update(bot, update)
+    return {"ok": True}
+
+@dp.message()
+async def start(m: types.Message):
+    await m.answer("Погнали!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 ИГРАТЬ", web_app=WebAppInfo(url=BASE_URL))]
+    ]))
