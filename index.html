@@ -6,65 +6,83 @@
     <script src="https://telegram.org"></script>
     <style>
         body { background: radial-gradient(circle, #2c3e50, #000); color: gold; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; user-select: none; }
-        #score { font-size: 60px; font-weight: bold; margin-bottom: 20px; }
-        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 10px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; }
+        #score { font-size: 50px; font-weight: bold; margin-bottom: 20px; }
+        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 8px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 30px orange; }
         .coin:active { transform: scale(0.92); }
-        .plus-one { position: absolute; color: #fff; font-size: 32px; font-weight: bold; animation: moveUp 0.7s ease-out forwards; pointer-events: none; }
-        @keyframes moveUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
-        
-        /* Таблица лидеров */
-        .btn-lead { margin-top: 30px; padding: 10px 20px; background: gold; color: black; border-radius: 20px; font-weight: bold; cursor: pointer; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10; padding-top: 50px; }
-        .lead-item { padding: 10px; border-bottom: 1px solid #333; }
+        .btns { display: flex; gap: 10px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
+        .btn { padding: 10px 15px; background: gold; color: #000; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10; padding-top: 40px; }
+        .plus-one { position: absolute; color: #fff; font-size: 28px; font-weight: bold; animation: moveUp 0.6s forwards; pointer-events: none; }
+        @keyframes moveUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-100px); } }
     </style>
 </head>
 <body>
     <div id="score">0</div>
     <div class="coin" id="coin">🔥</div>
-    <div class="btn-lead" onclick="showLeaders()">🏆 ТОП ИГРОКОВ</div>
+    
+    <div class="btns">
+        <div class="btn" onclick="showLeaders()">🏆 ТОП</div>
+        <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
+        <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
+    </div>
 
     <div id="modal">
-        <h2>ЛИДЕРЫ</h2>
-        <div id="list"></div>
-        <div class="btn-lead" onclick="document.getElementById('modal').style.display='none'">ЗАКРЫТЬ</div>
+        <h2 id="m-title"></h2>
+        <div id="m-list" style="padding: 20px; max-height: 60vh; overflow-y: auto;"></div>
+        <div class="btn" onclick="closeM()">ЗАКРЫТЬ</div>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
-        tg.expand();
         let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
-        let count = 0;
+        let count = 0, mult = 1;
 
         fetch(`/get_user/${userId}`).then(r => r.json()).then(d => {
-            count = d.score || 0;
+            count = d.score; mult = d.mult || 1;
             document.getElementById('score').innerText = count;
         });
 
         document.getElementById('coin').addEventListener('touchstart', (e) => {
-            count++;
+            count += mult;
             document.getElementById('score').innerText = count;
             const p = document.createElement('div');
-            p.className = 'plus-one'; p.innerText = '+1';
+            p.className = 'plus-one'; p.innerText = `+${mult}`;
             p.style.left = e.touches[0].clientX + 'px'; p.style.top = e.touches[0].clientY + 'px';
             document.body.appendChild(p);
-            setTimeout(() => p.remove(), 700);
+            setTimeout(() => p.remove(), 600);
             if (count % 5 === 0) save();
         });
 
         function save() {
             fetch('/update_score', { method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, score: count})
+                body: JSON.stringify({user_id: userId, score: count, mult: mult})
             });
         }
 
+        function showShop() {
+            openM("МАГАЗИН", `<p>Улучшить клик до +${mult+1}<br>Цена: ${mult*200} 🪙</p>
+                <div class="btn" onclick="buy(${mult*200})">КУПИТЬ</div>`);
+        }
+
+        function buy(cost) {
+            if (count >= cost) { count -= cost; mult++; save(); closeM(); } else { alert("Мало монет!"); }
+        }
+
         function showLeaders() {
-            const list = document.getElementById('list');
-            list.innerHTML = "Загрузка...";
-            document.getElementById('modal').style.display = 'block';
+            openM("ЛИДЕРЫ", "Загрузка...");
             fetch('/get_leaders').then(r => r.json()).then(data => {
-                list.innerHTML = data.map((l, i) => `<div class="lead-item">${i+1}. ID: ${l.id} — <b>${l.score}</b></div>`).join('');
+                document.getElementById('m-list').innerHTML = data.map(l => `<div>${l.id}: <b>${l.score}</b></div>`).join('');
             });
         }
+
+        function showFriends() {
+            let link = `https://t.me{userId}`;
+            openM("ДРУЗЬЯ", `<p>За друга: 500 🪙</p><input readonly value="${link}" style="width:80%"><br><br>
+                <div class="btn" onclick="navigator.clipboard.writeText('${link}')">КОПИРОВАТЬ</div>`);
+        }
+
+        function openM(t, h) { document.getElementById('m-title').innerText = t; document.getElementById('m-list').innerHTML = h; document.getElementById('modal').style.display='block'; }
+        function closeM() { document.getElementById('modal').style.display='none'; }
     </script>
 </body>
 </html>
