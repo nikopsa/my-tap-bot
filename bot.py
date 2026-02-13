@@ -11,14 +11,17 @@ from sqlalchemy import Column, BigInteger, Integer
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 BASE_URL = "https://my-tap-bot.onrender.com"
-# Ссылка без лишних знаков
-RAW_DB_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
+
+# ВАЖНО: Я убрал двоеточие перед названием базы вручную
+RAW_URL = "postgresql+asyncpg://fenix_tap_user:37ZKR3PCPIzEJ8VlOMNCwWPQ45azPJzw@://dpg-d67h43umcj7s739dfee0-a.oregon-postgres.render.com"
+# Очистка ссылки от возможных ошибок при копировании
+DATABASE_URL = RAW_URL.replace(':@', '@').replace(':@', '@').strip()
 
 logging.basicConfig(level=logging.INFO)
 
 # --- БАЗА ДАННЫХ ---
 Base = declarative_base()
-engine = create_async_engine(RAW_DB_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
@@ -39,7 +42,7 @@ async def startup():
         await bot.set_webhook(f"{BASE_URL}/webhook", drop_pending_updates=True)
         logging.info("FENIX SYSTEM ONLINE")
     except Exception as e:
-        logging.error(f"Startup Error: {e}")
+        logging.error(f"DATABASE ERROR: {e}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
