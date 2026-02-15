@@ -22,18 +22,25 @@ LEVELS = {
     4: {"name": "Лига Феникса", "limit": 100000, "img": "https://img.freepik.com"}
 }
 
-# --- 2. ЖЕСТКИЙ ФИКС БАЗЫ ДАННЫХ ---
-DB_URL = os.getenv("DATABASE_URL")
+# --- 2. УЛЬТИМАТИВНЫЙ ФИКС БАЗЫ (ЖИВУЧИЙ ДВИЖОК) ---
+DB_URL = os.getenv("DATABASE_URL", "").strip().replace(" ", "").replace("@://", "@")
+
+if DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif "postgresql://" in DB_URL and "asyncpg" not in DB_URL:
+    DB_URL = DB_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Создаем движок заранее, чтобы избежать ошибки "name 'engine' is not defined"
+engine = None
+async_session = None
 
 if DB_URL:
-    DB_URL = DB_URL.strip()
-    if DB_URL.startswith("postgres://"):
-        DB_URL = DB_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-    elif "postgresql://" in DB_URL and "asyncpg" not in DB_URL:
-        DB_URL = DB_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-else:
-    # Заглушка для локальной разработки
-    DB_URL = "postgresql+asyncpg://user:pass@localhost/db"
+    try:
+        engine = create_async_engine(DB_URL, pool_pre_ping=True)
+        async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        print("✅ SQLAlchemy Engine успешно инициализирован")
+    except Exception as e:
+        print(f"❌ ОШИБКА ИНИЦИАЛИЗАЦИИ ENGINE: {e}")
 
 Base = declarative_base()
 
@@ -48,14 +55,6 @@ class User(Base):
     ref_count = Column(Integer, default=0)
     last_tap_time = Column(BigInteger, default=0)
     last_bonus_time = Column(BigInteger, default=0)
-
-# Создание движка с обработкой ошибок
-try:
-    engine = create_async_engine(DB_URL, pool_pre_ping=True)
-    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-    print("✅ SQLAlchemy Engine успешно инициализирован")
-except Exception as e:
-    print(f"❌ ОШИБКА URL БАЗЫ: {e}")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -85,6 +84,9 @@ def main_kb(energy, balance):
 # --- 4. ХЕНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    if not async_session:
+        return await message.answer("❌ Ошибка базы данных. Обратитесь к админу.")
+    
     async with async_session() as session:
         user = await session.get(User, message.from_user.id)
         if not user:
@@ -96,6 +98,8 @@ async def cmd_start(message: types.Message):
 
 @dp.callback_query(F.data == "tap")
 async def handle_tap(callback: types.CallbackQuery):
+    if not async_session: return await callback.answer("Ошибка базы!", show_alert=True)
+    
     async with async_session() as session:
         user = await session.get(User, callback.from_user.id)
         now = int(time.time())
@@ -114,6 +118,16 @@ async def handle_tap(callback: types.CallbackQuery):
         else:
             await callback.answer("🪫 Нет энергии!", show_alert=True)
 
+@dp.callback_query(F.data == "top")
+async def handle_top(callback: types.CallbackQuery):
+    if not async_session: return
+    async with async_session() as session:
+        res = await session.execute(select(User).order_by(User.balance.desc()).limit(10))
+        users = res.scalars().all()
+        text = "🏆 *ТОП-10 ИГРОКОВ:*\n\n" + "\n".join([f"{i+1}. @{u.username or u.user_id} — {u.balance}" for i, u in enumerate(users)])
+        await callback.message.answer(text, parse_mode="Markdown")
+        await callback.answer()
+
 @dp.message(Command("admin"))
 async def admin(message: types.Message):
     if message.from_user.id == ADMIN_ID:
@@ -129,21 +143,18 @@ async def send_all(message: types.Message, command: CommandObject):
                 except: continue
         await message.answer("✅ Рассылка завершена")
 
-@dp.callback_query(F.data == "withdraw")
-async def handle_withdraw(callback: types.CallbackQuery):
-    await callback.answer("⏳ Вывод в разработке! Ожидай листинга.", show_alert=True)
-
 # --- 5. ЗАПУСК ДЛЯ RENDER ---
 @app.on_event("startup")
 async def on_startup():
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        await bot.delete_webhook(drop_pending_updates=True)
-        asyncio.create_task(dp.start_polling(bot))
-        print("🚀 FenixTap Engine Started Successfully!")
-    except Exception as e:
-        print(f"❌ ОШИБКА ПРИ СТАРТЕ: {e}")
+    if engine:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            await bot.delete_webhook(drop_pending_updates=True)
+            asyncio.create_task(dp.start_polling(bot))
+            print("🚀 FenixTap Engine Started Successfully!")
+        except Exception as e:
+            print(f"❌ ОШИБКА ПРИ СТАРТЕ: {e}")
 
 @app.get("/")
 async def root(): return {"status": "Fenix Alive", "admin": "ready"}
