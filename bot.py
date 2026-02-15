@@ -10,11 +10,11 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # --- 1. КОНФИГУРАЦИЯ ---
-TOKEN = "8377110375:AAGvsfsE3GXbDqQG_IS1Kmb8BL91GPDzO-Y"
+TOKEN = "8377110375:AAGHQZZi-AP4cWMT_CsvsdO93fMcSaZz_jw"
 ADMIN_ID = 1292046104 
 CHANNEL_ID = -1002476535560 
 
-# ЛИГИ (Добавил ссылки на картинки, чтобы не было ошибок)
+# ЛИГИ
 LEVELS = {
     1: {"name": "Бронзовая Лига", "limit": 0, "img": "https://img.freepik.com"},
     2: {"name": "Серебряная Лига", "limit": 5000, "img": "https://img.freepik.com"},
@@ -22,12 +22,10 @@ LEVELS = {
     4: {"name": "Лига Феникса", "limit": 100000, "img": "https://img.freepik.com"}
 }
 
-# --- 2. ФИКС БАЗЫ ---
+# --- 2. БАЗА ДАННЫХ (С АВТО-ФИКСОМ) ---
 DB_URL = os.getenv("DATABASE_URL", "").strip().replace(" ", "").replace("@://", "@")
 if DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-elif "postgresql://" in DB_URL and "asyncpg" not in DB_URL:
-    DB_URL = DB_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 engine = create_async_engine(DB_URL, pool_pre_ping=True) if DB_URL else None
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession) if engine else None
@@ -43,11 +41,10 @@ class User(Base):
     max_energy = Column(Integer, default=2500)
     last_tap_time = Column(BigInteger, default=0)
 
-# --- 3. ЛОГИКА ---
-def get_user_lvl(balance):
-    for lvl, data in sorted(LEVELS.items(), reverse=True):
-        if balance >= data["limit"]: return lvl, data
-    return 1, LEVELS[1]
+# --- 3. ИНИЦИАЛИЗАЦИЯ ---
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+app = FastAPI()
 
 def main_kb(energy, balance):
     lvl, data = get_user_lvl(balance)
@@ -57,14 +54,14 @@ def main_kb(energy, balance):
     prog = f"📊 До {next_lvl['name']}: {next_lvl['limit'] - balance}" if next_lvl else "⭐ МАКС. ЛИГА"
     builder.button(text=prog, callback_data="stats")
     builder.button(text="🏆 ТОП-10", callback_data="top")
-    builder.button(text="🛒 Магазин", callback_data="shop")
     builder.button(text="💳 ВЫВОД", callback_data="withdraw")
-    builder.adjust(1, 1, 2, 1)
+    builder.adjust(1, 1, 2)
     return builder.as_markup()
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-app = FastAPI()
+def get_user_lvl(balance):
+    for lvl, data in sorted(LEVELS.items(), reverse=True):
+        if balance >= data["limit"]: return lvl, data
+    return 1, LEVELS[1]
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -75,7 +72,7 @@ async def cmd_start(message: types.Message):
             session.add(user)
             await session.commit()
     _, data = get_user_lvl(user.balance)
-    await message.answer_photo(data["img"], f"🎮 *FenixTap:* Заряжено 2500 энергии!\n1 тап = 1 монета.", reply_markup=main_kb(user.energy, user.balance), parse_mode="Markdown")
+    await message.answer_photo(data["img"], f"🎮 *FenixTap:* Твой новый старт!\nЭнергия: 2500 🔋", reply_markup=main_kb(user.energy, user.balance), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "tap")
 async def handle_tap(callback: types.CallbackQuery):
@@ -94,37 +91,32 @@ async def handle_tap(callback: types.CallbackQuery):
             await session.commit()
             
             if new_lvl > old_lvl:
-                await callback.message.edit_media(types.InputMediaPhoto(media=new_data["img"], caption=f"🚀 НОВАЯ ЛИГА: {new_data['name']}!"), reply_markup=main_kb(user.energy, user.balance))
-            
+                await callback.message.edit_media(types.InputMediaPhoto(media=new_data["img"], caption=f"🚀 ЛИГА: {new_data['name']}!"), reply_markup=main_kb(user.energy, user.balance))
             await callback.answer(f"Баланс: {user.balance} | 🔋 {user.energy}")
         else:
-            await callback.answer("🪫 Энергия на нуле!", show_alert=True)
+            await callback.answer("🪫 Мало энергии!", show_alert=True)
 
 @dp.callback_query(F.data == "top")
 async def handle_top(callback: types.CallbackQuery):
     async with async_session() as session:
         res = await session.execute(select(User).order_by(User.balance.desc()).limit(10))
         users = res.scalars().all()
-        text = "🏆 *ТОП-10 ИГРОКОВ:*\n\n" + "\n".join([f"{i+1}. @{u.username or u.user_id} — {u.balance}" for i, u in enumerate(users)])
-        await callback.message.answer(text, parse_mode="Markdown")
-        await callback.answer()
+        text = "🏆 *ТОП-10:* \n\n" + "\n".join([f"{i+1}. @{u.username or u.user_id} — {u.balance}" for i, u in enumerate(users)])
+    await callback.message.answer(text, parse_mode="Markdown")
+    await callback.answer()
 
-# --- 4. ЗАПУСК С ПРИНУДИТЕЛЬНЫМ ОБНОВЛЕНИЕМ ТАБЛИЦ ---
+# --- 4. ЗАПУСК ---
 @app.on_event("startup")
 async def on_startup():
     if engine:
-        try:
-            async with engine.begin() as conn:
-                # ОЧИСТКА СТАРОЙ ТАБЛИЦЫ (ЧТОБЫ УБРАТЬ ОШИБКУ username)
-                await conn.run_sync(Base.metadata.drop_all)
-                # СОЗДАНИЕ НОВОЙ ТАБЛИЦЫ
-                await conn.run_sync(Base.metadata.create_all)
-            
-            await bot.delete_webhook(drop_pending_updates=True)
-            asyncio.create_task(dp.start_polling(bot))
-            print("🚀 БАЗА ОБНОВЛЕНА. FenixTap Запущен!")
-        except Exception as e:
-            print(f"❌ ОШИБКА ПРИ СТАРТЕ: {e}")
+        async with engine.begin() as conn:
+            # Сносим старую таблицу один раз для фикса столбцов
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        # Убиваем вебхук НОВЫМ токеном
+        await bot.delete_webhook(drop_pending_updates=True)
+        asyncio.create_task(dp.start_polling(bot))
+        print("🚀 БОТ ЗАПУЩЕН НА НОВОМ ТОКЕНЕ!")
 
 @app.get("/")
-async def root(): return {"status": "ok"}
+async def root(): return {"status": "alive"}
