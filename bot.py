@@ -1,49 +1,44 @@
 import os
 import asyncio
-from fastapi import FastAPI
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from urllib.parse import urlparse
 
-# Твой токен (Помни: @BotFather -> /revoke для безопасности!)
-BOT_TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
+# Твой токен
+TOKEN = "8377110375:AAG3GmbEpQGyIcfzyOByu6qPUPVbxhYpPSg"
 
-# 1. ПОЛУЧАЕМ И ИСПРАВЛЯЕМ URL БАЗЫ
-raw_db_url = os.getenv("DATABASE_URL")
+# Фикс URL базы для Render
+DB_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/db")
+if DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 
-def get_valid_url(url: str) -> str:
-    if not url:
-        # Если переменная пустая, используем заглушку, чтобы не было ошибки парсинга при запуске
-        return "postgresql+asyncpg://user:pass@localhost/db"
+engine = create_async_engine(DB_URL)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+# Команда /start
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    # Тут можно добавить логику регистрации в БД
+    await message.answer(
+        f"Привет, {message.from_user.first_name}! Это твоя тапалка.",
+        reply_markup=get_tap_kb()
+    )
+
+# Обработка тапа (клики)
+@dp.callback_query(F.data == "tap")
+async def handle_tap(callback: types.Callback_query):
+    # В идеале здесь должен быть запрос к БД для +1 монеты
+    # Для примера просто отвечаем пользователю:
+    await callback.answer("Баланс: +1 монета!", show_alert=False)
     
-    # Render часто дает postgres://, меняем на postgresql+asyncpg://
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-    elif url.startswith("postgresql://") and "asyncpg" not in url:
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    
-    return url
+    # Обновляем сообщение (можно выводить текущий баланс)
+    await callback.message.edit_text(
+        "Продолжай тапать! Твой прогресс сохранен.",
+        reply_markup=get_tap_kb()
+    )
 
-DATABASE_URL = get_valid_url(raw_db_url)
-
-# 2. СОЗДАЕМ ДВИЖОК (со всеми фиксами)
-engine = create_async_engine(
-    DATABASE_URL, 
-    pool_pre_ping=True,
-    echo=False  # Поставь True, если хочешь видеть SQL-запросы в логах
-)
-
-async_session = sessionmaker(
-    engine, 
-    expire_on_commit=False, 
-    class_=AsyncSession
-)
-
-# 3. ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
-app = FastAPI()
-
-@app.get("/")
-async def status():
-    return {"status": "ok", "bot_id": "8377110375"}
-
-# Твоя логика бота (aiogram или другая
+# ... остальной код с FastAPI для Render ...
