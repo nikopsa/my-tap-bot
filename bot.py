@@ -8,24 +8,28 @@ from sqlalchemy import Column, BigInteger, Integer, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# 1. НАСТРОЙКИ
+# --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAGvsfsE3GXbDqQG_IS1Kmb8BL91GPDzO-Y"
+CHANNEL_ID = -1002476535560  # Твой канал
+# Ссылка на картинку для красоты (можешь заменить на свою)
+IMAGE_URL = "https://img.freepik.com"
+
 DB_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql+asyncpg://", 1)
 
-# 2. БАЗА ДАННЫХ
+# --- БАЗА ДАННЫХ ---
 Base = declarative_base()
 
 class User(Base):
     __tablename__ = 'users'
     user_id = Column(BigInteger, primary_key=True)
     balance = Column(Integer, default=0)
-    ref_count = Column(Integer, default=0)
     tap_power = Column(Integer, default=1)
+    ref_count = Column(Integer, default=0)
+    sub_bonus = Column(Integer, default=0)
 
-engine = create_async_engine(DB_URL, pool_pre_ping=True)
+engine = create_async_engine(DB_URL)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-# 3. ИНИЦИАЛИЗАЦИЯ
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 app = FastAPI()
@@ -34,18 +38,11 @@ app = FastAPI()
 def main_kb():
     builder = InlineKeyboardBuilder()
     builder.button(text="💰 ТАПАТЬ", callback_data="tap")
-    builder.button(text="🛒 Магазин", callback_data="shop")
+    builder.button(text="🛒 Магазин/Донат", callback_data="shop")
     builder.button(text="🏆 ТОП", callback_data="top")
     builder.button(text="👥 Друзья", callback_data="refs")
-    builder.adjust(1, 2, 1)
-    return builder.as_markup()
-
-def shop_kb():
-    builder = InlineKeyboardBuilder()
-    builder.button(text="⚡ Мультитап — 500 🪙", callback_data="buy_multi")
-    builder.button(text="⭐ Купить 1000 🪙 (XTR)", callback_data="donate_stars")
-    builder.button(text="🔙 Назад", callback_data="back_to_main")
-    builder.adjust(1)
+    builder.button(text="🎁 Бонус за канал", callback_data="check_sub")
+    builder.adjust(1, 2, 2)
     return builder.as_markup()
 
 # --- ХЕНДЛЕРЫ ---
@@ -55,10 +52,25 @@ async def cmd_start(message: types.Message):
     async with async_session() as session:
         user = await session.get(User, message.from_user.id)
         if not user:
+            # Логика реферала
+            args = message.text.split()
+            if len(args) > 1 and args[1].isdigit():
+                ref_id = int(args[1])
+                referrer = await session.get(User, ref_id)
+                if referrer:
+                    referrer.ref_count += 1
+                    referrer.balance += 250 # Бонус за приглашение
+            
             user = User(user_id=message.from_user.id)
             session.add(user)
             await session.commit()
-    await message.answer("🎮 Добро пожаловать в FenixTap!", reply_markup=main_kb())
+    
+    await message.answer_photo(
+        photo=IMAGE_URL,
+        caption=f"🎮 *Добро пожаловать в FenixTap!*\n\nТапай монеты, приглашай друзей и стань самым богатым!",
+        reply_markup=main_kb(),
+        parse_mode="Markdown"
+    )
 
 @dp.callback_query(F.data == "tap")
 async def handle_tap(callback: types.CallbackQuery):
@@ -68,54 +80,79 @@ async def handle_tap(callback: types.CallbackQuery):
         await session.commit()
         await callback.answer(f"Баланс: {user.balance} (+{user.tap_power}) 🪙")
 
-# МАГАЗИН И ДОНАТ
-@dp.callback_query(F.data == "shop")
-async def handle_shop(callback: types.CallbackQuery):
-    await callback.message.edit_text("🛒 Магазин: прокачка за монеты или Донат за Звёзды ⭐", reply_markup=shop_kb())
-
-@dp.callback_query(F.data == "donate_stars")
-async def process_donate(callback: types.CallbackQuery):
-    # Отправляем счет на 50 Telegram Stars (XTR)
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title="1000 игровых монет",
-        description="Покупка валюты для FenixTap",
-        payload="buy_1000_coins",
-        provider_token="", # Для Stars оставляем пустым
-        currency="XTR",
-        prices=[types.LabeledPrice(label="Цена", amount=50)] # 50 звёзд
-    )
-    await callback.answer()
-
-# Проверка платежа (pre_checkout)
-@dp.pre_checkout_query()
-async def process_pre_checkout(pre_checkout_query: types.PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-
-# Успешная оплата
-@dp.message(F.successful_payment)
-async def success_payment(message: types.Message):
-    async with async_session() as session:
-        user = await session.get(User, message.from_user.id)
-        user.balance += 1000
-        await session.commit()
-    await message.answer(f"✅ Оплата прошла успешно! Вам начислено 1000 🪙")
-
-# РЕЙТИНГ И РЕФЕРАЛЫ (остаются как были)
 @dp.callback_query(F.data == "top")
 async def handle_top(callback: types.CallbackQuery):
     async with async_session() as session:
         res = await session.execute(select(User).order_by(User.balance.desc()).limit(10))
-        top_users = res.scalars().all()
-        text = "🏆 ТОП-10 ИГРОКОВ:\n\n" + "\n".join([f"{i+1}. ID:{u.user_id} — {u.balance}" for i, u in enumerate(top_users)])
-        await callback.message.answer(text)
-    await callback.answer()
+        users = res.scalars().all()
+        text = "🏆 *ТОП-10 ИГРОКОВ:*\n\n"
+        for i, u in enumerate(users):
+            text += f"{i+1}. `ID:{u.user_id}` — *{u.balance}* 🪙\n"
+        await callback.message.answer(text, parse_mode="Markdown")
+        await callback.answer()
 
-@dp.callback_query(F.data == "back_to_main")
-async def back_to_main(callback: types.CallbackQuery):
-    await callback.message.edit_text("🎮 Главное меню:", reply_markup=main_kb())
+@dp.callback_query(F.data == "refs")
+async def handle_refs(callback: types.CallbackQuery):
+    async with async_session() as session:
+        user = await session.get(User, callback.from_user.id)
+        me = await bot.get_me()
+        link = f"https://t.me{me.username}?start={user.user_id}"
+        await callback.message.answer(
+            f"👥 *Твои рефералы:* {user.ref_count}\n"
+            f"🎁 *Бонус за друга:* 250 🪙\n\n"
+            f"🔗 *Твоя ссылка:* \n`{link}`",
+            parse_mode="Markdown"
+        )
+        await callback.answer()
 
-# ЗАПУСК
+@dp.callback_query(F.data == "shop")
+async def shop(callback: types.CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⚡ Мультитап (500 🪙)", callback_data="buy_multi")
+    builder.button(text="⭐ 1000 🪙 (50 Stars)", callback_data="buy_stars")
+    builder.button(text="🔙 Назад", callback_data="back")
+    await callback.message.edit_caption(caption="🛒 *Магазин и Донат:*", reply_markup=builder.as_markup(), parse_mode="Markdown")
+
+@dp.callback_query(F.data == "buy_multi")
+async def buy_multi(callback: types.CallbackQuery):
+    async with async_session() as session:
+        user = await session.get(User, callback.from_user.id)
+        if user.balance >= 500:
+            user.balance -= 500
+            user.tap_power += 1
+            await session.commit()
+            await callback.answer("Успешно куплено!", show_alert=True)
+        else:
+            await callback.answer("Недостаточно монет!", show_alert=True)
+
+@dp.callback_query(F.data == "buy_stars")
+async def buy_stars(callback: types.CallbackQuery):
+    await bot.send_invoice(
+        callback.from_user.id,
+        title="1000 монет FenixTap",
+        description="Донат игровой валюты",
+        payload="coins_1000",
+        provider_token="",
+        currency="XTR",
+        prices=[types.LabeledPrice(label="XTR", amount=50)]
+    )
+
+@dp.callback_query(F.data == "back")
+async def back(callback: types.CallbackQuery):
+    await callback.message.edit_caption(caption="🎮 *Главное меню:*", reply_markup=main_kb(), parse_mode="Markdown")
+
+@dp.pre_checkout_query()
+async def pre_checkout(query: types.PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(query.id, ok=True)
+
+@dp.message(F.successful_payment)
+async def pay_ok(message: types.Message):
+    async with async_session() as session:
+        user = await session.get(User, message.from_user.id)
+        user.balance += 1000
+        await session.commit()
+    await message.answer("✅ Оплата прошла! Начислено 1000 🪙")
+
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
