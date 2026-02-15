@@ -11,9 +11,10 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 # --- 1. КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAGvsfsE3GXbDqQG_IS1Kmb8BL91GPDzO-Y"
-ADMIN_ID = 1292046104  # ТВОЙ РЕАЛЬНЫЙ ID
+ADMIN_ID = 1292046104  # Твой проверенный ID
 CHANNEL_ID = -1002476535560  # ID твоего канала
 
+# ЛИГИ И КАРТИНКИ
 LEVELS = {
     1: {"name": "Бронзовая Лига", "limit": 0, "img": "https://img.freepik.com"},
     2: {"name": "Серебряная Лига", "limit": 5000, "img": "https://img.freepik.com"},
@@ -21,7 +22,19 @@ LEVELS = {
     4: {"name": "Лига Феникса", "limit": 100000, "img": "https://img.freepik.com"}
 }
 
-DB_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql+asyncpg://", 1)
+# --- 2. ЖЕСТКИЙ ФИКС БАЗЫ ДАННЫХ ---
+DB_URL = os.getenv("DATABASE_URL")
+
+if DB_URL:
+    DB_URL = DB_URL.strip()
+    if DB_URL.startswith("postgres://"):
+        DB_URL = DB_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif "postgresql://" in DB_URL and "asyncpg" not in DB_URL:
+        DB_URL = DB_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    # Заглушка для локальной разработки
+    DB_URL = "postgresql+asyncpg://user:pass@localhost/db"
+
 Base = declarative_base()
 
 class User(Base):
@@ -36,14 +49,19 @@ class User(Base):
     last_tap_time = Column(BigInteger, default=0)
     last_bonus_time = Column(BigInteger, default=0)
 
-engine = create_async_engine(DB_URL, pool_pre_ping=True)
-async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+# Создание движка с обработкой ошибок
+try:
+    engine = create_async_engine(DB_URL, pool_pre_ping=True)
+    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    print("✅ SQLAlchemy Engine успешно инициализирован")
+except Exception as e:
+    print(f"❌ ОШИБКА URL БАЗЫ: {e}")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 app = FastAPI()
 
-# --- 2. ЛОГИКА ---
+# --- 3. ВСПОМОГАТЕЛЬНАЯ ЛОГИКА ---
 def get_user_lvl(balance):
     for lvl, data in sorted(LEVELS.items(), reverse=True):
         if balance >= data["limit"]: return lvl, data
@@ -51,10 +69,10 @@ def get_user_lvl(balance):
 
 def main_kb(energy, balance):
     lvl, data = get_user_lvl(balance)
-    next_lvl = LEVELS.get(lvl + 1)
+    next_lvl_data = LEVELS.get(lvl + 1)
     builder = InlineKeyboardBuilder()
     builder.button(text=f"🔥 ТАП ФЕНИКС ({energy}🔋) 🔥", callback_data="tap")
-    prog = f"📊 До {next_lvl['name']}: {next_lvl['limit'] - balance}" if next_lvl else "⭐ МАКС. ЛИГА"
+    prog = f"📊 До {next_lvl_data['name']}: {next_lvl_data['limit'] - balance}" if next_lvl_data else "⭐ МАКС. ЛИГА"
     builder.button(text=prog, callback_data="stats")
     builder.button(text="🎁 Бонус 150 🪙", callback_data="daily_bonus")
     builder.button(text="🛒 Магазин", callback_data="shop")
@@ -64,7 +82,7 @@ def main_kb(energy, balance):
     builder.adjust(1, 1, 1, 2, 2)
     return builder.as_markup()
 
-# --- 3. ХЕНДЛЕРЫ ---
+# --- 4. ХЕНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     async with async_session() as session:
@@ -96,7 +114,6 @@ async def handle_tap(callback: types.CallbackQuery):
         else:
             await callback.answer("🪫 Нет энергии!", show_alert=True)
 
-# Админка
 @dp.message(Command("admin"))
 async def admin(message: types.Message):
     if message.from_user.id == ADMIN_ID:
@@ -112,13 +129,21 @@ async def send_all(message: types.Message, command: CommandObject):
                 except: continue
         await message.answer("✅ Рассылка завершена")
 
-# --- 4. ЗАПУСК ---
+@dp.callback_query(F.data == "withdraw")
+async def handle_withdraw(callback: types.CallbackQuery):
+    await callback.answer("⏳ Вывод в разработке! Ожидай листинга.", show_alert=True)
+
+# --- 5. ЗАПУСК ДЛЯ RENDER ---
 @app.on_event("startup")
 async def on_startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await bot.delete_webhook(drop_pending_updates=True)
-    asyncio.create_task(dp.start_polling(bot))
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        await bot.delete_webhook(drop_pending_updates=True)
+        asyncio.create_task(dp.start_polling(bot))
+        print("🚀 FenixTap Engine Started Successfully!")
+    except Exception as e:
+        print(f"❌ ОШИБКА ПРИ СТАРТЕ: {e}")
 
 @app.get("/")
-async def root(): return {"status": "ok"}
+async def root(): return {"status": "Fenix Alive", "admin": "ready"}
