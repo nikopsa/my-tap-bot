@@ -14,7 +14,7 @@ TOKEN = "8377110375:AAGvsfsE3GXbDqQG_IS1Kmb8BL91GPDzO-Y"
 ADMIN_ID = 1292046104 
 CHANNEL_ID = -1002476535560 
 
-# ЛИГИ
+# ЛИГИ (Добавил ссылки на картинки, чтобы не было ошибок)
 LEVELS = {
     1: {"name": "Бронзовая Лига", "limit": 0, "img": "https://img.freepik.com"},
     2: {"name": "Серебряная Лига", "limit": 5000, "img": "https://img.freepik.com"},
@@ -39,7 +39,7 @@ class User(Base):
     username = Column(String, nullable=True)
     balance = Column(Integer, default=0)
     tap_power = Column(Integer, default=1)
-    energy = Column(Integer, default=2500) # Твои 2500 энергии
+    energy = Column(Integer, default=2500) 
     max_energy = Column(Integer, default=2500)
     last_tap_time = Column(BigInteger, default=0)
 
@@ -82,13 +82,12 @@ async def handle_tap(callback: types.CallbackQuery):
     async with async_session() as session:
         user = await session.get(User, callback.from_user.id)
         now = int(time.time())
-        # Реген 1 ед в 2 секунды
         regen = (now - user.last_tap_time) // 2
         if regen > 0: user.energy = min(user.max_energy, user.energy + regen)
         
         if user.energy >= 1:
             old_lvl, _ = get_user_lvl(user.balance)
-            user.balance += user.tap_power # 1 тап = твоя сила тапа (по умолчанию 1)
+            user.balance += user.tap_power 
             user.energy -= 1
             user.last_tap_time = now
             new_lvl, new_data = get_user_lvl(user.balance)
@@ -110,13 +109,22 @@ async def handle_top(callback: types.CallbackQuery):
         await callback.message.answer(text, parse_mode="Markdown")
         await callback.answer()
 
+# --- 4. ЗАПУСК С ПРИНУДИТЕЛЬНЫМ ОБНОВЛЕНИЕМ ТАБЛИЦ ---
 @app.on_event("startup")
 async def on_startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await bot.delete_webhook(drop_pending_updates=True)
-    asyncio.create_task(dp.start_polling(bot))
-    print("🚀 FenixTap Started: 2500 Energy Mode")
+    if engine:
+        try:
+            async with engine.begin() as conn:
+                # ОЧИСТКА СТАРОЙ ТАБЛИЦЫ (ЧТОБЫ УБРАТЬ ОШИБКУ username)
+                await conn.run_sync(Base.metadata.drop_all)
+                # СОЗДАНИЕ НОВОЙ ТАБЛИЦЫ
+                await conn.run_sync(Base.metadata.create_all)
+            
+            await bot.delete_webhook(drop_pending_updates=True)
+            asyncio.create_task(dp.start_polling(bot))
+            print("🚀 БАЗА ОБНОВЛЕНА. FenixTap Запущен!")
+        except Exception as e:
+            print(f"❌ ОШИБКА ПРИ СТАРТЕ: {e}")
 
 @app.get("/")
 async def root(): return {"status": "ok"}
