@@ -13,8 +13,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAGHQZZi-AP4cWMT_CsvsdO93fMcSaZz_jw"
 ADMIN_ID = 1292046104 
-# ОБЯЗАТЕЛЬНО ЗАМЕНИ ЭТУ ССЫЛКУ НА СВОЮ ИЗ RENDER (например, https://my-tap-bot.onrender.com)
-APP_URL = "https://your-app-name.onrender.com" 
+# ЗАМЕНИ ССЫЛКУ НИЖЕ НА СВОЮ ИЗ RENDER:
+APP_URL = "https://my-tap-bot.onrender.com" 
 REF_REWARD = 2500
 AD_REWARD = 5000 
 
@@ -44,9 +44,15 @@ app = FastAPI()
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# --- ИСПРАВЛЕННЫЙ ПУТЬ К HTML ---
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    with open("index.html", "r", encoding="utf-8") as f: return f.read()
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_path, "index.html")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return f"<h1>Ошибка: Файл index.html не найден по пути {file_path}</h1>"
 
 @app.get("/u/{uid}")
 async def get_user(uid: int):
@@ -127,7 +133,7 @@ async def energy_recovery():
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
-        # ЭТА СТРОКА ОДНОРАЗОВО УДАЛИТ И ПЕРЕСОЗДАСТ ТАБЛИЦЫ, ЧТОБЫ ИСПРАВИТЬ ОШИБКУ СТОЛБЦОВ
+        # Очистка для исправления структуры базы (выполнится при деплое)
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     await bot.delete_webhook(drop_pending_updates=True)
