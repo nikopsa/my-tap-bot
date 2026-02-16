@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org"></script>
-    <!-- ПОДКЛЮЧАЕМ СКРИПТ РЕКЛАМЫ -->
     <script src="https://sad.adsgram.ai"></script>
     <style>
         body { background: #000; color: gold; text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; }
@@ -40,7 +39,6 @@
         let id = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
 
-        // ИНИЦИАЛИЗАЦИЯ РЕКЛАМЫ (Замени ТВОЙ_BLOCK_ID)
         const AdController = window.Adsgram.init({ blockId: "ТВОЙ_BLOCK_ID" });
 
         function getLeague(s) {
@@ -59,11 +57,12 @@
             document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxEnergy}`;
         }
 
-        fetch('/u/' + id).then(r => r.json()).then(d => { 
+        // Загрузка данных (убрали начальный слеш)
+        fetch('u/' + id).then(r => r.json()).then(d => { 
             score = d.score; mult = d.mult; auto = d.auto; 
             energy = d.energy; maxEnergy = d.max_energy;
             draw(); 
-        });
+        }).catch(err => { document.getElementById('status').innerText = "Ошибка сети"; });
 
         setInterval(() => { if(auto > 0) { score += auto; draw(); if(Math.random() > 0.8) save(); } }, 1000);
 
@@ -80,20 +79,18 @@
         };
 
         function save() { 
-            fetch('/s', { 
+            fetch('s', { 
                 method: 'POST', 
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({id: id, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy), max_energy: maxEnergy}) 
             }); 
         }
 
-        // ФУНКЦИЯ ПРОСМОТРА РЕКЛАМЫ
         async function showAd() {
             try {
                 const result = await AdController.show();
                 if (result.done) {
-                    // Отправляем запрос на твой Python сервер для начисления монет
-                    const res = await fetch('/reward_ad', {
+                    const res = await fetch('reward_ad', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ id: id })
@@ -104,12 +101,12 @@
                     tg.showAlert("💰 Награда 5000 монет получена!");
                 }
             } catch (e) {
-                tg.showAlert("Реклама пока не готова или произошла ошибка.");
+                tg.showAlert("Реклама пока не готова.");
             }
         }
 
         function buyWithStars(item) {
-            fetch(`/create_invoice/${id}/${item}`).then(r => r.json()).then(d => {
+            fetch(`create_invoice/${id}/${item}`).then(r => r.json()).then(d => {
                 tg.openInvoice(d.link, (status) => {
                     if(status === 'paid') { tg.showAlert("Оплата прошла!"); location.reload(); }
                 });
@@ -128,9 +125,9 @@
         function buyA() { let c = (auto + 1) * 500; if(score >= c) { score -= c; auto++; save(); draw(); } }
         
         function showT() { 
-            fetch('/top').then(r => r.json()).then(d => { 
+            fetch('top').then(r => r.json()).then(d => { 
                 openM("ТОП", d.map((l, i) => `${i+1}. ${l.id}: ${l.s}`).join('<br>')); 
-            }); 
+            }).catch(() => openM("ТОП", "Пока пусто")); 
         }
 
         function showR() { 
