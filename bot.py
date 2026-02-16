@@ -18,8 +18,9 @@ APP_URL = "https://my-tap-bot.onrender.com"
 REF_REWARD = 2500
 AD_REWARD = 5000 
 
+# Исправление ссылки БД для Render PostgreSQL
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
-engine = create_async_engine(DB_URL)
+engine = create_async_engine(DB_URL, pool_pre_ping=True)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base()
 
@@ -34,15 +35,9 @@ class User(Base):
     max_energy = Column(Integer, default=2500)
     referrer_id = Column(BigInteger, nullable=True)
 
-class UserTask(Base):
-    __tablename__ = 'user_tasks'
-    id = Column(Integer, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey('users.user_id'))
-    task_id = Column(String)
-
 app = FastAPI()
 
-# Добавляем CORS, чтобы игра могла общаться с сервером без блокировок
+# CORS для связи игры и сервера без ошибок "Загрузка"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,17 +56,16 @@ async def serve_index():
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-            # Автоматическая замена путей в HTML на полные, чтобы не было "Загрузки"
-            return content.replace("fetch('/", f"fetch('{APP_URL}/")
-    return f"<h1>Ошибка: Файл index.html не найден</h1>"
+            # Автоматическая замена путей для стабильной работы
+            return content.replace("fetch('/", f"fetch('{APP_URL}/").replace("fetch('u/", f"fetch('{APP_URL}/u/")
+    return "<h1>Ошибка: index.html не найден</h1>"
 
 @app.get("/u/{uid}")
 async def get_user(uid: int):
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            user = User(user_id=uid); session.add(user); await session.commit()
-            await session.refresh(user)
+            user = User(user_id=uid); session.add(user); await session.commit(); await session.refresh(user)
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
 @app.post("/s")
@@ -91,17 +85,24 @@ async def reward_ad(request: Request):
     async with async_session() as session:
         user = await session.get(User, uid)
         if user:
-            user.balance += AD_REWARD
-            await session.commit()
+            user.balance += AD_REWARD; await session.commit()
             return {"status": "ok", "new_balance": user.balance}
     return {"status": "error"}
 
+# ОПЛАТА ЗВЕЗДАМИ: 5000 ЭНЕРГИИ ЗА 100 ЗВЕЗД
 @app.get("/create_invoice/{uid}/{item}")
 async def create_invoice(uid: int, item: str):
-    prices = {"mult": 50, "energy": 100}
+    prices = {"mult": 50, "energy": 100} # 100 звезд за 5000 энергии
     amount = prices.get(item, 50)
-    title = "Сила клика +1" if item == "mult" else "Бак +500"
-    link = await bot.create_invoice_link(title=title, description="Покупка за Звезды", payload=f"{uid}_{item}", provider_token="", currency="XTR", prices=[LabeledPrice(label=title, amount=amount)])
+    title = "Сила клика +1" if item == "mult" else "Мега-бак +5000"
+    link = await bot.create_invoice_link(
+        title=title, 
+        description="Покупка за Звезды", 
+        payload=f"{uid}_{item}", 
+        provider_token="", 
+        currency="XTR", 
+        prices=[LabeledPrice(label=title, amount=amount)]
+    )
     return {"link": link}
 
 @dp.pre_checkout_query()
@@ -113,24 +114,15 @@ async def on_success_pay(message: types.Message):
     uid, item = int(uid_item[0]), uid_item[1]
     async with async_session() as session:
         user = await session.get(User, uid)
-        if item == "mult": user.tap_power += 1
-        else: user.max_energy += 500; user.energy = user.max_energy
+        if item == "mult": 
+            user.tap_power += 1
+        else: 
+            user.max_energy += 5000; user.energy = user.max_energy # ДОБАВЛЕНО +5000
         await session.commit()
-    await message.answer("✅ Звезды приняты! Улучшение активировано.")
+    await message.answer("✅ Улучшение на 5000 энергии активировано!")
 
 @dp.message(Command("start"))
-async def start(message: types.Message, command: CommandObject):
-    async with async_session() as session:
-        user = await session.get(User, message.from_user.id)
-        if not user:
-            user = User(user_id=message.from_user.id, username=message.from_user.first_name)
-            if command.args and command.args.isdigit():
-                ref_id = int(command.args)
-                if ref_id != message.from_user.id:
-                    user.referrer_id = ref_id
-                    ref_user = await session.get(User, ref_id)
-                    if ref_user: ref_user.balance += REF_REWARD; user.balance += REF_REWARD
-            session.add(user); await session.commit()
+async def start(message: types.Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
     await message.answer("FenixTap: Тапай и зарабатывай!", reply_markup=kb.as_markup())
@@ -145,7 +137,6 @@ async def energy_recovery():
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
-        # УДАЛЕНО: drop_all больше не вызывается, данные сохраняются
         await conn.run_sync(Base.metadata.create_all)
     await bot.delete_webhook(drop_pending_updates=True)
     asyncio.create_task(dp.start_polling(bot))
