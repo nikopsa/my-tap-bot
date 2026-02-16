@@ -12,16 +12,15 @@ from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, se
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Логирование для контроля запуска в панели Render
+# Логирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- НАСТРОЙКИ (ТВОИ ДАННЫЕ) ---
+# --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 ADMIN_ID = 1292046104 
 APP_URL = "https://my-tap-bot.onrender.com" 
 
-# Настройка БД (SQLite для простоты или PostgreSQL для Render)
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
 engine = create_async_engine(DB_URL, pool_pre_ping=True)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -47,8 +46,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- ЛОГИКА ИГРЫ (API) ---
+# --- ДОБАВЛЕНО: ОТДАЧА ТВОЕГО INDEX.HTML ---
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    file_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>index.html не найден</h1>"
 
+# --- ТВОЯ ЛОГИКА API ---
 @app.get("/u/{uid}")
 async def get_user(uid: int):
     async with async_session() as session:
@@ -67,43 +74,19 @@ async def save_user(request: Request):
     async with async_session() as session:
         user = await session.get(User, int(data['id']))
         if user:
-            user.balance = data['score']
-            user.tap_power = data['mult']
-            user.auto_power = data['auto']
-            user.energy = data['energy']
+            user.balance = data['score']; user.tap_power = data['mult']
+            user.auto_power = data['auto']; user.energy = data['energy']
             user.last_touch = int(time.time())
-            user.level = (user.balance // 50000) + 1 # Уровень растет каждые 50к
+            user.level = (user.balance // 50000) + 1
             await session.commit()
     return {"status": "ok"}
 
-# --- КОМАНДЫ (СТАРТ И АДМИНКА) ---
-
+# --- ТВОИ КОМАНДЫ БОТА ---
 @dp.message(Command("start"))
 async def start(m: types.Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
-    await m.answer(f"Здарова, {m.from_user.first_name}! Бот на связи. Жми кнопку и погнали!", reply_markup=kb.as_markup())
-
-@dp.message(Command("admin"))
-async def admin(m: types.Message):
-    if m.from_user.id != ADMIN_ID: return
-    async with async_session() as session:
-        count = (await session.execute(select(func.count(User.user_id)))).scalar()
-    await m.answer(f"📊 Всего игроков в базе: {count}\n\nРассылка: `/send текст`")
-
-@dp.message(Command("send"))
-async def send_all(m: types.Message, command: CommandObject):
-    if m.from_user.id != ADMIN_ID or not command.args: return
-    async with async_session() as session:
-        users = (await session.execute(select(User.user_id))).scalars().all()
-    ok = 0
-    for u_id in users:
-        try:
-            await bot.send_message(u_id, command.args)
-            ok += 1
-            await asyncio.sleep(0.05)
-        except: continue
-    await m.answer(f"📢 Рассылка завершена!\nПолучили: {ok} человек.")
+    await m.answer(f"Здарова! Бот ожил. Твой ID: {m.from_user.id}", reply_markup=kb.as_markup())
 
 async def recovery():
     while True:
@@ -112,18 +95,17 @@ async def recovery():
             await session.execute(update(User).where(User.energy < User.max_energy).values(energy=User.energy + 20))
             await session.commit()
 
-# --- ИСПРАВЛЕНИЕ CONFLICT ДЛЯ RENDER ---
+# --- ДОБАВЛЕНО: ЖЕСТКИЙ СБРОС ДЛЯ RENDER ---
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn: 
         await conn.run_sync(Base.metadata.create_all)
     
-    # Сброс вебхуков и ожидание для очистки сессий Telegram
+    # Сброс вебхуков и очистка всех сессий
     await bot.delete_webhook(drop_pending_updates=True)
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(2) # Даем время серверам ТГ
     
-    logger.info("--- [СИСТЕМА] КОНФЛИКТ УСТРАНЕН, ЗАПУСК ПОЛЛИНГА ---")
-    
+    logger.info("--- БОТ ЗАПУСКАЕТСЯ БЕЗ КОНФЛИКТОВ ---")
     asyncio.create_task(dp.start_polling(bot, skip_updates=True))
     asyncio.create_task(recovery())
 
