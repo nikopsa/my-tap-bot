@@ -1,45 +1,85 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fenix Tap Premium</title>
     <script src="https://telegram.org"></script>
-    <script src="https://sad.adsgram.ai"></script>
+    <script src="https://sad.adsgram.ai"></script> <!-- Рекламный движок -->
     <style>
-        body { background: #000; color: gold; text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; }
-        .row { display: flex; justify-content: space-around; padding: 15px; }
-        #score { font-size: 50px; font-weight: bold; text-shadow: 0 0 10px gold; }
-        .coin { width: 220px; height: 220px; background: orange; border-radius: 50%; border: 8px solid gold; font-size: 80px; display: flex; justify-content: center; align-items: center; margin: auto; cursor: pointer; transition: transform 0.05s; position: relative; }
-        .coin:active { transform: scale(0.95); }
-        .btn { padding: 12px; background: #111; border: 1px solid gold; color: gold; border-radius: 12px; width: 45%; font-weight: bold; cursor: pointer; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; padding: 20px; overflow-y: auto; }
-        .plus { position: absolute; color: white; font-size: 30px; animation: up 0.6s forwards; pointer-events: none; }
-        #energy-bar { width: 80%; height: 10px; background: #333; margin: 5px auto; border-radius: 5px; overflow: hidden; }
-        #energy-fill { width: 100%; height: 100%; background: lime; transition: width 0.3s; }
-        #league { font-weight: bold; color: white; margin-bottom: 5px; font-size: 18px; }
-        .ad-btn { background: #f39c12; color: #000; border: none; margin-top: 10px; width: 100%; padding: 10px; border-radius: 10px; font-weight: bold; }
-        @keyframes up { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-100px); } }
+        :root { --gold: #ffd700; --bg: #000; }
+        body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; }
+        
+        .header { padding: 15px; display: flex; justify-content: space-around; }
+        .btn { padding: 10px; background: #111; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; width: 42%; font-weight: bold; font-size: 13px; }
+        
+        #score { font-size: 50px; font-weight: bold; text-shadow: 0 0 15px var(--gold); }
+        #league { font-size: 18px; color: white; margin-top: 10px; font-weight: bold; letter-spacing: 1px; }
+
+        .coin-box { position: relative; margin: auto; display: flex; justify-content: center; align-items: center; }
+        .coin { width: 220px; height: 220px; background: radial-gradient(circle, #f39c12, #d35400); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 30px rgba(243, 156, 18, 0.5); }
+        .coin:active { transform: scale(0.92); }
+
+        #energy-bar { width: 80%; height: 12px; background: #222; margin: 10px auto; border-radius: 6px; border: 1px solid #444; overflow: hidden; }
+        #energy-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00ff00, #adff2f); transition: width 0.3s; }
+        
+        .footer-btns { padding: 15px; display: flex; justify-content: space-around; }
+        
+        /* Модальные окна */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; padding: 20px; box-sizing: border-box; }
+        .modal-content { margin-top: 50px; }
+        .ad-btn { background: #f39c12; color: #000; border: none; width: 100%; padding: 15px; border-radius: 12px; font-weight: bold; margin-bottom: 20px; font-size: 16px; }
+
+        /* Эффект клика */
+        .plus { position: absolute; color: white; font-weight: bold; font-size: 28px; animation: flyUp 0.6s forwards; pointer-events: none; }
+        @keyframes flyUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
     </style>
 </head>
 <body>
-    <div class="row"><div class="btn" onclick="showT()">🏆 ТОП</div><div class="btn" onclick="showR()">👥 ДРУЗЬЯ</div></div>
-    <div>
-        <div id="league">БРОНЗА</div>
-        <div id="score">0</div>
-        <div id="status">Загрузка...</div>
-        <div id="energy-bar"><div id="energy-fill"></div></div>
-        <div id="energy-text">⚡ 2500 / 2500</div>
+
+    <div class="header">
+        <div class="btn" onclick="showTop()">🏆 ТОП</div>
+        <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
     </div>
-    <div class="coin" id="coin">🔥</div>
-    <div class="row"><div class="btn" onclick="showS()">🛒 МАГАЗИН</div><div class="btn" onclick="buyA()">⚙️ МАЙНЕР</div></div>
-    <div id="modal"><h2 id="mt"></h2><br><div id="ml"></div><br><div class="btn" style="width:100%" onclick="closeM()">ЗАКРЫТЬ</div></div>
+
+    <div>
+        <div id="league">🥉 БРОНЗА</div>
+        <div id="score">0</div>
+        <div id="status" style="font-size: 12px; opacity: 0.7;">Загрузка...</div>
+    </div>
+
+    <div class="coin-box">
+        <div class="coin" id="coin">🔥</div>
+    </div>
+
+    <div>
+        <div id="energy-text" style="font-size: 14px; margin-bottom: 5px;">⚡ 2500 / 2500</div>
+        <div id="energy-bar"><div id="energy-fill"></div></div>
+    </div>
+
+    <div class="footer-btns">
+        <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
+        <div class="btn" onclick="buyMiner()">⚙️ МАЙНЕР</div>
+    </div>
+
+    <!-- Модалка -->
+    <div id="modal">
+        <h2 id="modal-title"></h2>
+        <div id="modal-body" class="modal-content"></div>
+        <br>
+        <div class="btn" style="width:100%" onclick="closeModal()">ЗАКРЫТЬ</div>
+    </div>
 
     <script>
-        let tg = window.Telegram.WebApp; tg.expand();
-        let id = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
+        
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
-
-        const AdController = window.Adsgram.init({ blockId: "ТВОЙ_BLOCK_ID" });
+        const APP_URL = "https://my-tap-bot.onrender.com"; // Проверь свой URL
+        
+        // Реклама (вставь свой Block ID)
+        const AdController = window.Adsgram ? window.Adsgram.init({ blockId: "ТВОЙ_BLOCK_ID" }) : null;
 
         function getLeague(s) {
             if (s >= 100000) return "🔥 ФЕНИКС";
@@ -48,95 +88,116 @@
             return "🥉 БРОНЗА";
         }
 
-        function draw() { 
-            document.getElementById('score').innerText = Math.floor(score); 
+        function updateUI() {
+            document.getElementById('score').innerText = Math.floor(score);
             document.getElementById('league').innerText = getLeague(score);
-            document.getElementById('status').innerText = `Клик: +${mult} | Авто: ${auto}/с`;
-            let proc = (energy / maxEnergy) * 100;
-            document.getElementById('energy-fill').style.width = proc + "%";
             document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxEnergy}`;
+            document.getElementById('energy-fill').style.width = (energy / maxEnergy * 100) + "%";
+            document.getElementById('status').innerText = `Клик: +${mult} | Авто: ${auto}/с`;
         }
 
-        // Загрузка данных (убрали начальный слеш)
-        fetch('u/' + id).then(r => r.json()).then(d => { 
-            score = d.score; mult = d.mult; auto = d.auto; 
+        // Загрузка
+        fetch(`${APP_URL}/u/${uid}`).then(r => r.json()).then(d => {
+            score = d.score; mult = d.mult; auto = d.auto;
             energy = d.energy; maxEnergy = d.max_energy;
-            draw(); 
-        }).catch(err => { document.getElementById('status').innerText = "Ошибка сети"; });
+            updateUI();
+        });
 
-        setInterval(() => { if(auto > 0) { score += auto; draw(); if(Math.random() > 0.8) save(); } }, 1000);
-
+        // Клик
         document.getElementById('coin').onclick = (e) => {
             if (energy >= mult) {
-                energy -= mult; score += mult; draw();
-                let p = document.createElement('div'); p.className = 'plus'; p.innerText = '+' + mult;
-                p.style.left = e.pageX + 'px'; p.style.top = e.pageY + 'px';
-                document.body.appendChild(p); setTimeout(() => p.remove(), 600);
-                if(score % 10 === 0) save();
+                score += mult; energy -= mult;
+                createPlusAnim(e.pageX, e.pageY);
+                updateUI();
+                if (Math.random() > 0.9) save();
             } else {
                 tg.HapticFeedback.notificationOccurred('error');
             }
         };
 
-        function save() { 
-            fetch('s', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: id, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy), max_energy: maxEnergy}) 
-            }); 
+        function createPlusAnim(x, y) {
+            let p = document.createElement('div');
+            p.className = 'plus'; p.innerText = '+' + mult;
+            p.style.left = x + 'px'; p.style.top = y + 'px';
+            document.body.appendChild(p);
+            setTimeout(() => p.remove(), 600);
         }
 
-        async function showAd() {
-            try {
-                const result = await AdController.show();
+        function save() {
+            fetch(`${APP_URL}/s`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy), max_energy: maxEnergy})
+            });
+        }
+
+        // Реклама
+        async function watchAd() {
+            if (!AdController) return tg.showAlert("Рекламный блок не настроен");
+            AdController.show().then(async (result) => {
                 if (result.done) {
-                    const res = await fetch('reward_ad', {
+                    const res = await fetch(`${APP_URL}/reward_ad`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ id: id })
+                        body: JSON.stringify({ id: uid })
                     });
-                    const data = await res.json();
-                    score = data.new_balance;
-                    draw();
-                    tg.showAlert("💰 Награда 5000 монет получена!");
+                    const d = await res.json();
+                    score = d.new_balance;
+                    updateUI();
+                    tg.showAlert("💰 +5000 монет получено!");
                 }
-            } catch (e) {
-                tg.showAlert("Реклама пока не готова.");
-            }
+            }).catch(() => tg.showAlert("Реклама сейчас недоступна"));
         }
 
-        function buyWithStars(item) {
-            fetch(`create_invoice/${id}/${item}`).then(r => r.json()).then(d => {
+        function showShop() {
+            let content = `
+                <button class="ad-btn" onclick="watchAd()">📺 РЕКЛАМА (+5000 🪙)</button>
+                <div style="text-align:left; padding: 10px;">
+                    ⭐ Клик +1: <b>50 Звезд</b> <button class="btn" style="width:70px" onclick="payStars('mult')">OK</button><br><br>
+                    ⭐ Бак +5000: <b>100 Звезд</b> <button class="btn" style="width:70px" onclick="payStars('energy')">OK</button><br><br>
+                    🪙 Майнер (+1/с): <b>${(auto + 1) * 1000} 🪙</b> <button class="btn" style="width:70px" onclick="buyMiner()">КУПИТЬ</button>
+                </div>
+            `;
+            openModal("🛒 МАГАЗИН", content);
+        }
+
+        function payStars(item) {
+            fetch(`${APP_URL}/create_invoice/${uid}/${item}`).then(r => r.json()).then(d => {
                 tg.openInvoice(d.link, (status) => {
-                    if(status === 'paid') { tg.showAlert("Оплата прошла!"); location.reload(); }
+                    if(status === 'paid') { tg.showAlert("Успешно улучшено!"); location.reload(); }
                 });
             });
         }
 
-        function showS() { 
-            openM("🛒 МАГАЗИН", 
-                `<button class="ad-btn" onclick="showAd()">📺 СМОТРЕТЬ РЕКЛАМУ (+5000 🪙)</button><hr>` +
-                `⭐ Клик +1: 50 Звезд <button onclick="buyWithStars('mult')">КУПИТЬ</button><br><br>` +
-                `⭐ Бак +500: 100 Звезд <button onclick="buyWithStars('energy')">КУПИТЬ</button><br><br>` +
-                `🪙 Майнер: ${(auto+1)*500} 🪙 <button onclick="buyA()">КУПИТЬ</button>`
-            ); 
+        function buyMiner() {
+            let cost = (auto + 1) * 1000;
+            if (score >= cost) {
+                score -= cost; auto++;
+                save(); updateUI();
+            } else { tg.showAlert("Мало монет!"); }
         }
 
-        function buyA() { let c = (auto + 1) * 500; if(score >= c) { score -= c; auto++; save(); draw(); } }
-        
-        function showT() { 
-            fetch('top').then(r => r.json()).then(d => { 
-                openM("ТОП", d.map((l, i) => `${i+1}. ${l.id}: ${l.s}`).join('<br>')); 
-            }).catch(() => openM("ТОП", "Пока пусто")); 
+        function showTop() {
+            fetch(`${APP_URL}/top`).then(r => r.json()).then(d => {
+                let list = d.map((u, i) => `<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>${i+1}. ${u.n}</span> <b>${u.s}</b></div>`).join('');
+                openModal("🏆 ТОП ИГРОКОВ", list);
+            });
         }
 
-        function showR() { 
-            let link = `https://t.me{id}`;
-            openM("👥 ДРУЗЬЯ", `Приглашай друзей (+2500 🪙)<br><br><small>${link}</small>`); 
+        function showFriends() {
+            let refLink = `https://t.me{uid}`;
+            openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small>${refLink}</small>`);
         }
 
-        function openM(t, h) { document.getElementById('mt').innerText = t; document.getElementById('ml').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
-        function closeM() { document.getElementById('modal').style.display = 'none'; }
+        function openModal(t, h) { document.getElementById('modal-title').innerText = t; document.getElementById('modal-body').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+        // Пассивный доход каждую секунду
+        setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
+        // Реген энергии +10 каждые 5 сек
+        setInterval(() => { if(energy < maxEnergy) { energy = Math.min(maxEnergy, energy + 10); updateUI(); } }, 5000);
+        // Авто-сейв каждые 20 сек
+        setInterval(save, 20000);
     </script>
 </body>
 </html>
