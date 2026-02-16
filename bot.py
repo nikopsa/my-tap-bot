@@ -37,7 +37,7 @@ class User(Base):
 
 app = FastAPI()
 
-# CORS для связи игры и сервера без ошибок "Загрузка"
+# CORS для связи игры и сервера (убирает бесконечную "Загрузку")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,8 +56,8 @@ async def serve_index():
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-            # Автоматическая замена путей для стабильной работы
-            return content.replace("fetch('/", f"fetch('{APP_URL}/").replace("fetch('u/", f"fetch('{APP_URL}/u/")
+            # Интеллектуальная замена путей для Mini App
+            return content.replace("fetch('/", f"fetch('{APP_URL}/").replace("fetch('u/", f"fetch('{APP_URL}/u/").replace("fetch('s'", f"fetch('{APP_URL}/s'").replace("fetch('top'", f"fetch('{APP_URL}/top'")
     return "<h1>Ошибка: index.html не найден</h1>"
 
 @app.get("/u/{uid}")
@@ -67,6 +67,13 @@ async def get_user(uid: int):
         if not user:
             user = User(user_id=uid); session.add(user); await session.commit(); await session.refresh(user)
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
+
+@app.get("/top")
+async def get_top():
+    async with async_session() as session:
+        result = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
+        users = result.scalars().all()
+        return [{"id": u.user_id, "n": u.username or "Игрок", "s": u.balance} for u in users]
 
 @app.post("/s")
 async def save_user(request: Request):
@@ -89,20 +96,12 @@ async def reward_ad(request: Request):
             return {"status": "ok", "new_balance": user.balance}
     return {"status": "error"}
 
-# ОПЛАТА ЗВЕЗДАМИ: 5000 ЭНЕРГИИ ЗА 100 ЗВЕЗД
 @app.get("/create_invoice/{uid}/{item}")
 async def create_invoice(uid: int, item: str):
-    prices = {"mult": 50, "energy": 100} # 100 звезд за 5000 энергии
+    prices = {"mult": 50, "energy": 100} 
     amount = prices.get(item, 50)
     title = "Сила клика +1" if item == "mult" else "Мега-бак +5000"
-    link = await bot.create_invoice_link(
-        title=title, 
-        description="Покупка за Звезды", 
-        payload=f"{uid}_{item}", 
-        provider_token="", 
-        currency="XTR", 
-        prices=[LabeledPrice(label=title, amount=amount)]
-    )
+    link = await bot.create_invoice_link(title=title, description="Покупка за Звезды", payload=f"{uid}_{item}", provider_token="", currency="XTR", prices=[LabeledPrice(label=title, amount=amount)])
     return {"link": link}
 
 @dp.pre_checkout_query()
@@ -117,12 +116,23 @@ async def on_success_pay(message: types.Message):
         if item == "mult": 
             user.tap_power += 1
         else: 
-            user.max_energy += 5000; user.energy = user.max_energy # ДОБАВЛЕНО +5000
+            user.max_energy += 5000; user.energy = user.max_energy 
         await session.commit()
-    await message.answer("✅ Улучшение на 5000 энергии активировано!")
+    await message.answer("✅ Улучшение (5000 энергии) активировано!")
 
 @dp.message(Command("start"))
-async def start(message: types.Message):
+async def start(message: types.Message, command: CommandObject):
+    async with async_session() as session:
+        user = await session.get(User, message.from_user.id)
+        if not user:
+            user = User(user_id=message.from_user.id, username=message.from_user.first_name)
+            if command.args and command.args.isdigit():
+                ref_id = int(command.args)
+                if ref_id != message.from_user.id:
+                    user.referrer_id = ref_id
+                    ref_user = await session.get(User, ref_id)
+                    if ref_user: ref_user.balance += REF_REWARD; user.balance += REF_REWARD
+            session.add(user); await session.commit()
     kb = InlineKeyboardBuilder()
     kb.button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
     await message.answer("FenixTap: Тапай и зарабатывай!", reply_markup=kb.as_markup())
