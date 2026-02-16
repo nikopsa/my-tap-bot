@@ -1,6 +1,7 @@
 import os, asyncio, json
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandObject
@@ -13,7 +14,6 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAGHQZZi-AP4cWMT_CsvsdO93fMcSaZz_jw"
 ADMIN_ID = 1292046104 
-# ЗАМЕНИ ССЫЛКУ НИЖЕ НА СВОЮ ИЗ RENDER:
 APP_URL = "https://my-tap-bot.onrender.com" 
 REF_REWARD = 2500
 AD_REWARD = 5000 
@@ -41,18 +41,29 @@ class UserTask(Base):
     task_id = Column(String)
 
 app = FastAPI()
+
+# Добавляем CORS, чтобы игра могла общаться с сервером без блокировок
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- ИСПРАВЛЕННЫЙ ПУТЬ К HTML ---
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     base_path = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(base_path, "index.html")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return f"<h1>Ошибка: Файл index.html не найден по пути {file_path}</h1>"
+            content = f.read()
+            # Автоматическая замена путей в HTML на полные, чтобы не было "Загрузки"
+            return content.replace("fetch('/", f"fetch('{APP_URL}/")
+    return f"<h1>Ошибка: Файл index.html не найден</h1>"
 
 @app.get("/u/{uid}")
 async def get_user(uid: int):
@@ -60,6 +71,7 @@ async def get_user(uid: int):
         user = await session.get(User, uid)
         if not user:
             user = User(user_id=uid); session.add(user); await session.commit()
+            await session.refresh(user)
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
 @app.post("/s")
@@ -133,8 +145,7 @@ async def energy_recovery():
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
-        # Очистка для исправления структуры базы (выполнится при деплое)
-        await conn.run_sync(Base.metadata.drop_all)
+        # УДАЛЕНО: drop_all больше не вызывается, данные сохраняются
         await conn.run_sync(Base.metadata.create_all)
     await bot.delete_webhook(drop_pending_updates=True)
     asyncio.create_task(dp.start_polling(bot))
