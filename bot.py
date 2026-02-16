@@ -7,7 +7,7 @@ import uvicorn
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.types import LabeledPrice, PreCheckoutQuery
+from aiogram.types import LabeledPrice, PreCheckoutQuery, Update
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, select, desc, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 ADMIN_ID = 1292046104 
 APP_URL = "https://my-tap-bot.onrender.com" 
+WEBHOOK_PATH = f"/webhook/{TOKEN}" # Путь для вебхука
 
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
 engine = create_async_engine(DB_URL, pool_pre_ping=True)
@@ -45,6 +46,13 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+# --- ДОБАВЛЕНО: ОБРАБОТЧИК ВЕБХУКА ---
+@app.post(WEBHOOK_PATH)
+async def bot_webhook(request: Request):
+    update = Update.model_validate(await request.json(), context={"bot": bot})
+    await dp.feed_update(bot, update)
+    return {"ok": True}
 
 # --- ДОБАВЛЕНО: ОТДАЧА ТВОЕГО INDEX.HTML ---
 @app.get("/", response_class=HTMLResponse)
@@ -95,19 +103,20 @@ async def recovery():
             await session.execute(update(User).where(User.energy < User.max_energy).values(energy=User.energy + 20))
             await session.commit()
 
-# --- ДОБАВЛЕНО: ЖЕСТКИЙ СБРОС ДЛЯ RENDER ---
+# --- ОБНОВЛЕНО: ЗАПУСК ЧЕРЕЗ WEBHOOK ---
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn: 
         await conn.run_sync(Base.metadata.create_all)
     
-    # Сброс вебхуков и очистка всех сессий
-    await bot.delete_webhook(drop_pending_updates=True)
-    await asyncio.sleep(2) # Даем время серверам ТГ
+    # Установка вебхука вместо polling
+    webhook_url = f"{APP_URL}{WEBHOOK_PATH}"
+    await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     
-    logger.info("--- БОТ ЗАПУСКАЕТСЯ БЕЗ КОНФЛИКТОВ ---")
-    asyncio.create_task(dp.start_polling(bot, skip_updates=True))
+    logger.info(f"--- БОТ ЗАПУЩЕН ЧЕРЕЗ WEBHOOK: {webhook_url} ---")
     asyncio.create_task(recovery())
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # Используем порт из переменной окружения Render
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
