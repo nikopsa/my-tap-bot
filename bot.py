@@ -13,8 +13,9 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAGHQZZi-AP4cWMT_CsvsdO93fMcSaZz_jw"
 ADMIN_ID = 1292046104 
-APP_URL = "https://your-app-name.onrender.com" # ЗАМЕНИ ПОСЛЕ ДЕПЛОЯ
+APP_URL = "https://your-app-name.onrender.com" 
 REF_REWARD = 2500
+AD_REWARD = 5000  # Сколько монет даем за просмотр рекламы
 
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
 engine = create_async_engine(DB_URL)
@@ -64,6 +65,19 @@ async def save_user(request: Request):
             energy=data['energy'], max_energy=data.get('max_energy', 2500)))
         await session.commit()
     return {"status": "ok"}
+
+# --- НОВЫЙ ЭНДПОИНТ: НАГРАДА ЗА РЕКЛАМУ ---
+@app.post("/reward_ad")
+async def reward_ad(request: Request):
+    data = await request.json()
+    uid = int(data['id'])
+    async with async_session() as session:
+        user = await session.get(User, uid)
+        if user:
+            user.balance += AD_REWARD
+            await session.commit()
+            return {"status": "ok", "new_balance": user.balance}
+    return {"status": "error"}
 
 @app.get("/create_invoice/{uid}/{item}")
 async def create_invoice(uid: int, item: str):
