@@ -1,6 +1,6 @@
-import os, asyncio, json, time
+import os, asyncio, json, time, logging
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -12,13 +12,18 @@ from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, se
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+# Логирование для контроля атак
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 ADMIN_ID = 1292046104 
 APP_URL = "https://my-tap-bot.onrender.com" 
 
+# Оптимизированное подключение к БД
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
-engine = create_async_engine(DB_URL, pool_pre_ping=True)
+engine = create_async_engine(DB_URL, pool_pre_ping=True, pool_size=20, max_overflow=10)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base()
 
@@ -28,10 +33,11 @@ class User(Base):
     username = Column(String)
     balance = Column(Integer, default=500)
     tap_power = Column(Integer, default=1)
-    auto_power = Column(Integer, default=0) # Пассивный доход в секунду
+    auto_power = Column(Integer, default=0) 
     energy = Column(Integer, default=2500)
     max_energy = Column(Integer, default=2500)
-    last_touch = Column(Integer, default=int(time.time())) # Для пассивного дохода
+    last_touch = Column(Integer, default=int(time.time())) 
+    last_save = Column(Integer, default=int(time.time())) # ЗАЩИТА ОТ СПАМА
     last_bonus = Column(DateTime, default=datetime.utcnow() - timedelta(days=1))
     referrer_id = Column(BigInteger, nullable=True)
 
@@ -41,32 +47,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- АДМИНКА (РАССЫЛКА) ---
-@dp.message(Command("send"))
-async def broadcast(message: types.Message, command: CommandObject):
-    if message.from_user.id != ADMIN_ID or not command.args: return
-    async with async_session() as session:
-        users = await session.execute(select(User.user_id))
-        u_list = users.scalars().all()
-    
-    count = 0
-    for uid in u_list:
-        try:
-            await bot.send_message(uid, command.args)
-            count += 1
-            await asyncio.sleep(0.05) # Защита от спам-фильтра ТГ
-        except: continue
-    await message.answer(f"✅ Рассылка завершена. Получили: {count} чел.")
+# --- API С ЗАЩИТОЙ ---
 
-@dp.message(Command("admin"))
-async def admin_panel(message: types.Message):
-    if message.from_user.id != ADMIN_ID: return
-    async with async_session() as session:
-        count = (await session.execute(select(func.count(User.user_id)))).scalar()
-        text = f"📊 **Админ-панель**\n👤 Юзеров: {count}\n\n`/send текст` — рассылка"
-    await message.answer(text, parse_mode="Markdown")
-
-# --- ЛОГИКА ИГРЫ ---
 @app.get("/u/{uid}")
 async def get_user(uid: int):
     async with async_session() as session:
@@ -75,87 +57,123 @@ async def get_user(uid: int):
             user = User(user_id=uid, last_touch=int(time.time()))
             session.add(user); await session.commit(); await session.refresh(user)
         
-        # Расчет пассивного дохода (оффлайн бонус)
         now = int(time.time())
-        offline_seconds = now - user.last_touch
-        passive_earned = offline_seconds * user.auto_power
-        if passive_earned > 0:
-            user.balance += passive_earned
+        offline_earned = (now - user.last_touch) * user.auto_power
+        if offline_earned > 0:
+            # Ограничение оффлайн дохода за раз (защита)
+            offline_earned = min(offline_earned, 1000000) 
+            user.balance += offline_earned
             user.last_touch = now
             await session.commit()
             
-        return {
-            "score": user.balance, "mult": user.tap_power, "auto": user.auto_power, 
-            "energy": user.energy, "max_energy": user.max_energy, "offline": passive_earned
-        }
+        return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy, "offline": offline_earned}
 
 @app.post("/s")
 async def save_user(request: Request):
     data = await request.json()
-    uid = int(data['id'])
+    uid, now = int(data['id']), int(time.time())
+    
     async with async_session() as session:
         user = await session.get(User, uid)
-        if user:
-            # Базовая защита: проверяем, не пришло ли слишком много за раз
-            diff = data['score'] - user.balance
-            if diff > 50000: return {"status": "nice_try_hacker"} # Лимит на один пакет данных
-            
-            user.balance = data['score']
-            user.tap_power = data['mult']
-            user.auto_power = data['auto']
-            user.energy = data['energy']
-            user.last_touch = int(time.time())
-            await session.commit()
+        if not user: return {"status": "error"}
+
+        # 🛡 ЗАЩИТА №1: Анти-флуд (не чаще раз в 2 сек)
+        if now - user.last_save < 2:
+            return {"status": "too_fast"}
+
+        # 🛡 ЗАЩИТА №2: Математическая проверка (не более 1000 монет в сек)
+        time_diff = now - user.last_save
+        max_possible = (time_diff * user.tap_power * 10) + (time_diff * user.auto_power) + 500
+        if (data['score'] - user.balance) > max_possible:
+            logger.warning(f"Cheat detected for user {uid}")
+            return {"status": "cheat_detected"}
+
+        user.balance = data['score']
+        user.tap_power = data['mult']
+        user.auto_power = data['auto']
+        user.energy = data['energy']
+        user.last_save = now
+        user.last_touch = now
+        await session.commit()
     return {"status": "ok"}
 
-@dp.message(Command("bonus"))
-async def daily_bonus(message: types.Message):
+@app.get("/top")
+async def get_top():
     async with async_session() as session:
-        user = await session.get(User, message.from_user.id)
+        result = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
+        users = result.scalars().all()
+        return [{"n": u.username or "Player", "s": u.balance} for u in users]
+
+@app.post("/reward_ad")
+async def reward_ad(request: Request):
+    data = await request.json()
+    async with async_session() as session:
+        user = await session.get(User, int(data['id']))
         if user:
-            now = datetime.utcnow()
-            if now - user.last_bonus > timedelta(days=1):
-                user.balance += 5000
-                user.last_bonus = now
-                await session.commit()
-                await message.answer("🎁 Ежедневный бонус +5000 монет зачислен!")
-            else:
-                await message.answer("⏳ Бонус можно взять раз в 24 часа.")
+            user.balance += 5000; await session.commit()
+            return {"status": "ok", "new_balance": user.balance}
+    return {"status": "error"}
+
+# --- ПЛАТЕЖИ (STARS) ---
+
+@app.get("/create_invoice/{uid}/{item}")
+async def create_invoice(uid: int, item: str):
+    prices = {"mult": 50, "energy": 100}
+    amt = prices.get(item, 50)
+    link = await bot.create_invoice_link(
+        title="Fenix Boost", 
+        description="Upgrade your power!", 
+        payload=f"{uid}_{item}", 
+        provider_token="", 
+        currency="XTR", 
+        prices=[LabeledPrice(label="Stars", amount=amt)]
+    )
+    return {"link": link}
+
+@dp.pre_checkout_query()
+async def pre_checkout(q: PreCheckoutQuery): await q.answer(ok=True)
+
+@dp.message(F.successful_payment)
+async def pay_ok(m: types.Message):
+    p = m.successful_payment.invoice_payload.split("_")
+    uid, item = int(p[0]), p[1]
+    async with async_session() as session:
+        user = await session.get(User, uid)
+        if item == "mult": user.tap_power += 1
+        else: user.max_energy += 5000; user.energy = user.max_energy
+        await session.commit()
+    await m.answer("🔥 Улучшение успешно активировано!")
+
+# --- СТАРТ И АДМИНКА ---
 
 @dp.message(Command("start"))
-async def start(message: types.Message, command: CommandObject):
+async def start(m: types.Message, command: CommandObject):
     async with async_session() as session:
-        user = await session.get(User, message.from_user.id)
+        user = await session.get(User, m.from_user.id)
         if not user:
-            user = User(user_id=message.from_user.id, username=message.from_user.first_name)
+            user = User(user_id=m.from_user.id, username=m.from_user.first_name)
             if command.args and command.args.isdigit():
-                ref_id = int(command.args)
-                if ref_id != message.from_user.id:
-                    user.referrer_id = ref_id
-                    ref_parent = await session.get(User, ref_id)
-                    if ref_parent: ref_parent.balance += 2500; user.balance += 2500
+                ref_parent = await session.get(User, int(command.args))
+                if ref_parent: ref_parent.balance += 2500; user.balance += 2500
             session.add(user); await session.commit()
     
     kb = InlineKeyboardBuilder()
     kb.button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
-    kb.button(text="🎁 БОНУС", callback_data="daily") # Можно вызвать через команду /bonus
-    await message.answer("FenixTap: Тапай, копи пассив и забирай бонусы!", reply_markup=kb.as_markup())
+    await m.answer("FenixTap: Твой путь к миллионам начался!", reply_markup=kb.as_markup())
 
-# --- ТЕХНИЧЕСКАЯ ЧАСТЬ ---
-async def energy_recovery():
+async def recovery_loop():
     while True:
         await asyncio.sleep(60)
         async with async_session() as session:
-            await session.execute(update(User).where(User.energy < User.max_energy).values(energy=User.energy + 10))
+            await session.execute(update(User).where(User.energy < User.max_energy).values(energy=User.energy + 15))
             await session.commit()
 
 @app.on_event("startup")
 async def on_startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn: await conn.run_sync(Base.metadata.create_all)
     await bot.delete_webhook(drop_pending_updates=True)
     asyncio.create_task(dp.start_polling(bot, skip_updates=True))
-    asyncio.create_task(energy_recovery())
+    asyncio.create_task(recovery_loop())
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
