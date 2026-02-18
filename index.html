@@ -200,5 +200,68 @@
         // Авто-сейв каждые 20 сек
         setInterval(save, 20000);
     </script>
+<script>
+    let tg = window.Telegram.WebApp;
+    tg.ready(); tg.expand();
+    let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
+    let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
+    const APP_URL = "https://my-tap-bot.onrender.com"; 
+
+    async function loadData() {
+        try {
+            let res = await fetch(`${APP_URL}/get_user?id=${uid}`);
+            if (res.ok) {
+                let data = await res.json();
+                score = data.score; mult = data.mult; energy = data.energy;
+                document.getElementById("score").innerText = score;
+                document.getElementById("status").innerText = "ОК";
+            }
+        } catch (e) { document.getElementById("status").innerText = "Ошибка API"; }
+    }
+    loadData(); // Запуск!
+
+    async function loadData() {
+        try {
+            let res = await fetch(`${APP_URL}/get_user?id=${uid}`);
+            if (res.ok) {
+                let data = await res.json();
+                score = data.score; 
+                mult = data.mult; 
+                energy = data.energy;
+                maxEnergy = data.max_energy || 2500; // Чтобы не было пустой шкалы
+
+                document.getElementById("score").innerText = score;
+                document.getElementById("energy-text").innerText = `⚡ ${energy} / ${maxEnergy}`;
+                document.getElementById("energy-fill").style.width = (energy / maxEnergy * 100) + "%";
+                document.getElementById("status").innerText = "ОК";
+            }
+        } catch (e) { 
+            document.getElementById("status").innerText = "Ошибка API"; 
+        }
+    }
+    loadData(); // Запуск!
+
+    async function saveData() {
+        fetch(`${APP_URL}/s`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: uid, score: score, mult: mult, auto: auto, energy: energy})
+        });
+    }
+ document.getElementById("coin").onclick = function(e) {
+        if (energy >= mult) {
+            score += mult; 
+            energy -= mult;
+            
+            // ОБНОВЛЯЕМ ЭКРАН (Тут ты оборвал код)
+            document.getElementById("score").innerText = score;
+            document.getElementById("energy-text").innerText = `⚡ ${energy} / ${maxEnergy}`;
+            document.getElementById("energy-fill").style.width = (energy / maxEnergy * 100) + "%";
+            
+            saveData(); // Сохраняем в базу
+        }
+    };
+</script>
 </body>
 </html>
+                
