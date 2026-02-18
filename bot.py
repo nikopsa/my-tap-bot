@@ -1,6 +1,6 @@
 import os, asyncio, json, time, logging
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response  # Добавлен Response
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 ADMIN_ID = 1292046104 
 APP_URL = "https://my-tap-bot.onrender.com" 
-WEBHOOK_PATH = f"/webhook/{TOKEN}" # Путь для вебхука
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
 
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
 engine = create_async_engine(DB_URL, pool_pre_ping=True)
@@ -47,23 +47,33 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- ДОБАВЛЕНО: ОБРАБОТЧИК ВЕБХУКА ---
+# --- КОРРЕКТИРОВКА: ОБРАБОТКА WEBHOOK ---
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
-    update = Update.model_validate(await request.json(), context={"bot": bot})
-    await dp.feed_update(bot, update)
-    return {"ok": True}
+    try:
+        data = await request.json()
+        update = Update.model_validate(data, context={"bot": bot})
+        await dp.feed_update(bot, update)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Error in webhook: {e}")
+        return {"ok": False, "error": str(e)}
 
-# --- ДОБАВЛЕНО: ОТДАЧА ТВОЕГО INDEX.HTML ---
+# --- ДОБАВЛЕНО: ОБРАБОТКА HEAD И GET ДЛЯ КОРНЯ ---
 @app.get("/", response_class=HTMLResponse)
-async def serve_index():
-    file_path = os.path.join(os.path.dirname(__file__), "index.html")
+@app.head("/")
+async def serve_index(request: Request):
+    if request.method == "HEAD":
+        return Response(status_code=200)
+    
+    # Пытаемся найти index.html в текущей директории
+    file_path = os.path.join(os.getcwd(), "index.html")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
-    return "<h1>index.html не найден</h1>"
+    return "<h1>index.html не найден. Бот работает.</h1>"
 
-# --- ТВОЯ ЛОГИКА API ---
+# --- ВАША ЛОГИКА API (БЕЗ ИЗМЕНЕНИЙ) ---
 @app.get("/u/{uid}")
 async def get_user(uid: int):
     async with async_session() as session:
@@ -89,7 +99,7 @@ async def save_user(request: Request):
             await session.commit()
     return {"status": "ok"}
 
-# --- ТВОИ КОМАНДЫ БОТА ---
+# --- ВАШИ КОМАНДЫ БОТА (БЕЗ ИЗМЕНЕНИЙ) ---
 @dp.message(Command("start"))
 async def start(m: types.Message):
     kb = InlineKeyboardBuilder()
@@ -99,17 +109,19 @@ async def start(m: types.Message):
 async def recovery():
     while True:
         await asyncio.sleep(60)
-        async with async_session() as session:
-            await session.execute(update(User).where(User.energy < User.max_energy).values(energy=User.energy + 20))
-            await session.commit()
+        try:
+            async with async_session() as session:
+                await session.execute(update(User).where(User.energy < User.max_energy).values(energy=User.energy + 20))
+                await session.commit()
+        except Exception as e:
+            logger.error(f"Recovery error: {e}")
 
-# --- ОБНОВЛЕНО: ЗАПУСК ЧЕРЕЗ WEBHOOK ---
+# --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАПУСКЕ ---
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn: 
         await conn.run_sync(Base.metadata.create_all)
     
-    # Установка вебхука вместо polling
     webhook_url = f"{APP_URL}{WEBHOOK_PATH}"
     await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     
@@ -117,6 +129,5 @@ async def on_startup():
     asyncio.create_task(recovery())
 
 if __name__ == "__main__":
-    # Используем порт из переменной окружения Render
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
