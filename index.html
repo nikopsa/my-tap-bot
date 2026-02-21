@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fenix Tap Premium</title>
-    <!-- ИСПРАВЛЕНО: Правильное подключение Telegram WebApp SDK -->
+    <!-- Подключаем правильный SDK Telegram -->
     <script src="https://telegram.org"></script>
-    <script src="https://sad.adsgram.ai"></script> 
     <style>
         :root { --gold: #ffd700; --bg: #000; }
         body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
@@ -59,12 +58,10 @@
         tg.ready();
         tg.expand();
         
-        // Получаем ID пользователя
-        let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
-        let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
-        
-        // Оставляем пустым, чтобы запросы шли на тот же домен
+        let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 1292046104;
         const APP_URL = ""; 
+
+        let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
 
         function getLeague(s) {
             if (s >= 100000) return "🔥 ФЕНИКС";
@@ -131,20 +128,24 @@
             if (score >= cost) {
                 score -= cost; auto++;
                 save(); updateUI();
-            } else { tg.showAlert("Мало монет!"); }
+                tg.showScanQrPopup({text: "Успешная покупка!"}); // Маленькое уведомление
+                setTimeout(() => tg.closeScanQrPopup(), 1000);
+            } else { 
+                tg.showAlert("Мало монет! Нужно: " + cost); 
+            }
         }
 
         function showTop() {
             fetch(`${APP_URL}/top`).then(r => r.ok ? r.json() : []).then(d => {
-                let list = d.length > 0 ? d.map((u, i) => `<div>${i+1}. ${u.n} - ${u.s}</div>`).join('') : "Топ пуст";
+                let list = d.length > 0 ? d.map((u, i) => `<div style="display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:5px"><span>${i+1}. ${u.n}</span> <b>${u.s}</b></div>`).join('') : "Топ пуст";
                 openModal("🏆 ТОП", list);
             }).catch(() => openModal("🏆 ТОП", "Ошибка загрузки топа"));
         }
 
         function showFriends() {
-            // Замени на актуальную ссылку своего бота
-            let refLink = `https://t.me{uid}`; 
-            openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small style="word-break: break-all;">${refLink}</small>`);
+            let botUsername = "твой_бот"; // ЗАМЕНИ НА СВОЕГО БОТА
+            let refLink = `https://t.me{botUsername}?start=${uid}`; 
+            openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small style="word-break: break-all; color:#ffd700">${refLink}</small>`);
         }
 
         function showShop() {
@@ -163,7 +164,7 @@
         loadData();
         setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
         setInterval(() => { if(energy < maxEnergy) { energy = Math.min(maxEnergy, energy + 10); updateUI(); } }, 5000);
-        setInterval(save, 10000); // Сохраняем каждые 10 сек
+        setInterval(save, 10000); 
     </script>
 </body>
 </html>
