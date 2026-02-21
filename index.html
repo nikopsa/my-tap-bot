@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fenix Tap Premium v1.0.1</title>
-    <!-- Официальный SDK Telegram -->
-    <script src="https://telegram.org"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --gold: #ffd700; --bg: #000; }
         body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
@@ -42,7 +41,7 @@
     <div>
         <div id="energy-text" style="font-size: 14px; margin-bottom: 5px;">⚡ 2500 / 2500</div>
         <div id="energy-bar"><div id="energy-fill"></div></div>
-        <div id="ver">v1.0.1 - build fix</div>
+        <div id="ver">v1.0.1 - stability fix</div>
     </div>
     <div class="footer-btns">
         <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
@@ -56,17 +55,21 @@
     </div>
 
     <script>
-        // ЛОВУШКА ОШИБОК (если код упадет, ты увидишь alert)
+        // ЛОВУШКА ОШИБОК
         window.onerror = function(m, u, l) {
-            alert("Критическая ошибка: " + m + "\nСтрока: " + l);
+            console.error("Ошибка: " + m + " на строке: " + l);
         };
 
-        let tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
+        // КОРРЕКТИВА: Безопасная инициализация TG
+        let tg = window.Telegram ? window.Telegram.WebApp : null;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
         
         const APP_URL = "https://my-tap-bot.onrender.com"; 
-        let uid = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 1292046104;
+        // Если tg не загружен, используем тестовый ID, чтобы код не падал
+        let uid = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 1292046104;
         
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
 
@@ -78,28 +81,31 @@
         }
 
         function updateUI() {
-            document.getElementById('score').innerText = Math.floor(score);
-            document.getElementById('league').innerText = getLeague(score);
-            document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxEnergy}`;
-            document.getElementById('energy-fill').style.width = (energy / maxEnergy * 100) + "%";
-            document.getElementById('status').innerText = `Клик: +${mult} | Авто: ${auto}/с`;
+            const scoreEl = document.getElementById('score');
+            const leagueEl = document.getElementById('league');
+            const energyTextEl = document.getElementById('energy-text');
+            const energyFillEl = document.getElementById('energy-fill');
+            const statusEl = document.getElementById('status');
+
+            if(scoreEl) scoreEl.innerText = Math.floor(score);
+            if(leagueEl) leagueEl.innerText = getLeague(score);
+            if(energyTextEl) energyTextEl.innerText = `⚡ ${Math.floor(energy)} / ${maxEnergy}`;
+            if(energyFillEl) energyFillEl.style.width = (energy / maxEnergy * 100) + "%";
+            if(statusEl) statusEl.innerText = `Клик: +${mult} | Авто: ${auto}/с`;
         }
 
         async function loadData() {
             try {
-                // Добавляем timestamp к запросу, чтобы Render/Cloudflare не кэшировали ответ
                 let res = await fetch(`${APP_URL}/get_user?id=${uid}&t=${Date.now()}`);
                 if (res.ok) {
                     let d = await res.json();
-                    score = d.score; mult = d.mult; auto = d.auto;
-                    energy = d.energy; maxEnergy = d.max_energy;
+                    score = d.score || 0; mult = d.mult || 1; auto = d.auto || 0;
+                    energy = d.energy || 2500; maxEnergy = d.max_energy || 2500;
                     updateUI();
-                } else {
-                    alert("Сервер ответил ошибкой: " + res.status);
                 }
             } catch (e) { 
-                alert("Ошибка соединения с сервером: " + e.message);
-                document.getElementById('status').innerText = "Ошибка сети"; 
+                console.log("Ожидание сервера...");
+                document.getElementById('status').innerText = "Офлайн режим"; 
             }
         }
 
@@ -110,7 +116,7 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy)})
                 });
-            } catch (e) { console.log("Ошибка автосохранения"); }
+            } catch (e) { /* Игнорируем ошибки автосохранения в консоли */ }
         }
 
         document.getElementById('coin').onclick = (e) => {
@@ -121,29 +127,31 @@
                 p.style.left = e.clientX + 'px'; p.style.top = (e.clientY - 50) + 'px';
                 document.body.appendChild(p); setTimeout(() => p.remove(), 600);
                 updateUI();
-            } else if (tg.HapticFeedback) {
+            } else if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred('error');
             }
         };
 
+        // КОРРЕКТИВА: Все функции кнопок теперь проверяют наличие tg
         function buyMiner() {
             let cost = (auto + 1) * 1000;
             if (score >= cost) { 
                 score -= cost; auto++; save(); updateUI(); 
             } else { 
-                tg.showAlert("Недостаточно монет!"); 
+                if (tg && tg.showAlert) tg.showAlert("Недостаточно монет!"); 
+                else alert("Недостаточно монет!");
             }
         }
 
         function showTop() {
             fetch(`${APP_URL}/top`).then(r => r.json()).then(d => {
                 let list = d.map((u, i) => `<div style="display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:5px"><span>${i+1}. ${u.n}</span> <b>${u.s}</b></div>`).join('');
-                openModal("🏆 ТОП", list);
+                openModal("🏆 ТОП", list || "Список пуст");
             }).catch(() => alert("Не удалось загрузить ТОП"));
         }
 
         function showFriends() {
-            let refLink = `https://t.me{uid}`; 
+            let refLink = `https://t.me/share/url?url=https://t.me/YOUR_BOT_USERNAME?start=${uid}`; 
             openModal("👥 ДРУЗЬЯ", `Твоя ссылка:<br><small>${refLink}</small><br><br>Пригласи друга и получи <b>2500 🪙</b>`);
         }
 
