@@ -1,97 +1,129 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fenix Tap</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background: #000; color: #fff; text-align: center; font-family: sans-serif; margin: 0; padding: 0; overflow: hidden; }
-        .header { display: flex; padding: 10px; gap: 10px; background: #111; }
-        .btn { flex: 1; padding: 12px; background: #222; border: 1px solid #ffd700; color: #ffd700; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        #score { font-size: 45px; color: #ffd700; margin: 20px 0; font-weight: bold; }
-        .coin { width: 220px; height: 220px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; margin: 20px auto; display: flex; align-items: center; justify-content: center; font-size: 90px; border: 5px solid #ffd700; cursor: pointer; box-shadow: 0 0 20px #ff4500; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto; }
-        .shop-item { padding: 15px; border: 1px solid #333; margin-bottom: 10px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; background: #111; }
-        .progress { width: 85%; height: 12px; background: #222; margin: 10px auto; border-radius: 6px; overflow: hidden; border: 1px solid #444; }
-        .fill { height: 100%; background: linear-gradient(90deg, #ff4500, #ffd700); width: 100%; transition: width 0.3s; }
+        :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; }
+        body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        .header { padding: 10px; display: flex; background: #111; gap: 8px; justify-content: center; }
+        .btn { padding: 10px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 10px; cursor: pointer; font-size: 11px; font-weight: bold; flex: 1; text-transform: uppercase; }
+        #score { font-size: 48px; font-weight: 800; color: var(--gold); margin: 15px 0; }
+        .coin-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .coin { width: 230px; height: 230px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s; box-shadow: 0 0 30px var(--fire); }
+        .coin:active { transform: scale(0.92); }
+        .progress-box { width: 85%; align-self: center; margin-bottom: 25px; }
+        .bar-bg { width: 100%; height: 14px; background: #222; border-radius: 7px; border: 1px solid #444; overflow: hidden; }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width 0.3s; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .shop-card { background: #111; padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); text-align: left; }
     </style>
 </head>
 <body>
     <div class="header">
-        <button class="btn" onclick="showTop()">🏆 ТОП</button>
-        <button class="btn" onclick="showShop()">🛒 МАГАЗИН</button>
+        <div class="btn" onclick="showTop()">🏆 ТОП</div>
+        <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
+        <div class="btn" onclick="tg.showAlert('Задания скоро!')">📋 ЗАДАНИЯ</div>
     </div>
 
-    <div id="score">0</div>
-    <div id="coin" class="coin">🥚</div>
-    
-    <div style="font-size: 14px; margin-top: 10px;">⚡ <span id="e-text">2500/2500</span> | ⛏️ <span id="a-text">0</span>/s</div>
-    <div class="progress"><div id="e-fill" class="fill"></div></div>
+    <div class="coin-container">
+        <div id="score">0</div>
+        <div id="rank" style="color:var(--gold); font-weight:bold; margin-bottom:10px;">ЯЙЦО</div>
+        <div id="coin" class="coin">🥚</div>
+    </div>
+
+    <div class="progress-box">
+        <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+            <span id="energy-text">⚡ 2500 / 2500</span>
+            <span id="auto-text">⛏️ 0/s</span>
+        </div>
+        <div class="bar-bg"><div id="energy-fill" class="bar-fill"></div></div>
+    </div>
 
     <div id="modal">
-        <h2 id="m-title" style="color:#ffd700"></h2>
+        <h2 id="m-title" style="color:var(--gold)"></h2>
         <div id="m-body"></div>
-        <button class="btn" style="width:100%; margin-top:20px; background: #111;" onclick="document.getElementById('modal').style.display='none'">НАЗАД</button>
+        <button class="btn" style="width:100%; margin-top:25px;" onclick="closeM()">⬅️ НАЗАД</button>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
         const APP_URL = "https://my-tap-bot.onrender.com";
         let uid = tg.initDataUnsafe?.user?.id || 12345;
-        let score = 0, auto = 0, energy = 2500, maxE = 2500;
+        let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500;
 
         async function load() {
-            let r = await fetch(`${APP_URL}/get_user?id=${uid}`);
-            let d = await r.json();
-            score = d.score; auto = d.auto; energy = d.energy; maxE = d.max_energy;
-            updateUI();
+            try {
+                let r = await fetch(`${APP_URL}/get_user?id=${uid}`);
+                let d = await r.json();
+                score = d.score; mult = d.mult || 1; auto = d.auto || 0; energy = d.energy; maxE = d.max_energy;
+                updateUI();
+            } catch(e) {}
         }
 
         function updateUI() {
             document.getElementById('score').innerText = Math.floor(score).toLocaleString();
-            document.getElementById('e-text').innerText = `${Math.floor(energy)}/${maxE}`;
-            document.getElementById('e-fill').style.width = (energy/maxE*100) + "%";
-            document.getElementById('a-text').innerText = auto;
+            document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxE}`;
+            document.getElementById('energy-fill').style.width = (energy/maxE*100) + "%";
+            document.getElementById('auto-text').innerText = `⛏️ ${auto}/s`;
+            let c = document.getElementById('coin'), r = document.getElementById('rank');
+            if(score < 50000) { c.innerText="🥚"; r.innerText="ЯЙЦО"; }
+            else if(score < 500000) { c.innerText="🐣"; r.innerText="ПТЕНЕЦ"; }
+            else { c.innerText="🔥"; r.innerText="ФЕНИКС"; }
         }
 
         document.getElementById('coin').onclick = () => {
-            if(energy >= 1) { score += 1; energy -= 1; updateUI(); if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); }
+            if(energy >= mult) {
+                score += mult; energy -= mult;
+                updateUI();
+                if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            }
         };
 
+        function openM(t, h) { 
+            document.getElementById('m-title').innerText=t; 
+            document.getElementById('m-body').innerHTML=h;
+            document.getElementById('modal').style.display='block'; 
+        }
+        function closeM() { document.getElementById('modal').style.display='none'; }
+
         async function showTop() {
-            document.getElementById('m-title').innerText = "🏆 ЛИДЕРЫ";
-            document.getElementById('m-body').innerHTML = "Загрузка...";
-            document.getElementById('modal').style.display = 'block';
-            let r = await fetch(`${APP_URL}/get_top`);
-            let d = await r.json();
-            let h = d.map((u, i) => `<div class="shop-item"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-            document.getElementById('m-body').innerHTML = h;
+            openM("🏆 ЛИДЕРЫ", "Загрузка...");
+            try {
+                let r = await fetch(`${APP_URL}/get_top`);
+                let d = await r.json();
+                let medals = ["🥇", "🥈", "🥉"];
+                let h = d.map((u, i) => `<div class="shop-card"><span>${medals[i] || (i+1 + '.')} ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
+                openM("🏆 ЛИДЕРЫ", h);
+            } catch(e) { openM("🏆 ЛИДЕРЫ", "Ошибка связи"); }
         }
 
         function showShop() {
+            let cost = (auto + 1) * 1200;
             let h = `
-                <div class="shop-item"><span>⛏️ Майнер (+1/с)<br><small>${(auto+1)*1000} 🪙</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyM()">КУПИТЬ</button></div>
-                <div class="shop-item" style="border-color: #0088cc;"><span>⭐ 1,000,000 МОНЕТ<br><small>500 звёзд</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyS('coins_1m')">ВЗЯТЬ</button></div>
-                <div class="shop-item" style="border-color: #2ecc71;"><span>⭐ ЭНЕРГИЯ 5000<br><small>100 звёзд</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
+                <div class="shop-card"><span>⛏️ Майнер (+1/с)<br><small>Цена: ${cost} 🪙</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyM(${cost})">КУПИТЬ</button></div>
+                <div class="shop-card" style="border-color:#0088cc"><span>💰 1M МОНЕТ<br><small>Цена: 500 ⭐</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyS('coins_1m')">ВЗЯТЬ</button></div>
+                <div class="shop-card" style="border-color:#2ecc71"><span>⚡ ЭНЕРГИЯ 5000<br><small>Цена: 100 ⭐</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
             `;
-            document.getElementById('m-title').innerText = "🛒 МАГАЗИН";
-            document.getElementById('m-body').innerHTML = h;
-            document.getElementById('modal').style.display = 'block';
+            openM("🛒 МАГАЗИН", h);
         }
 
-        function buyM() {
-            let cost = (auto + 1) * 1000;
-            if(score >= cost) { score -= cost; auto += 1; updateUI(); showShop(); } else { tg.showAlert("Мало монет!"); }
+        function buyM(cost) {
+            if(score >= cost) { score -= cost; auto += 1; updateUI(); showShop(); }
+            else { tg.showAlert("Недостаточно монет!"); }
         }
 
         async function buyS(t) {
             let r = await fetch(`${APP_URL}/create_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:t})});
             let d = await r.json();
-            if(d.link) tg.openInvoice(d.link, (status) => { if(status==='paid') { tg.showAlert("Успешно!"); load(); } });
+            if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') load(); });
         }
 
-        setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
-        setInterval(() => { fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); }, 6000);
+        setInterval(() => { if(auto>0){ score+=auto; updateUI(); } }, 1000);
+        setInterval(() => { fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); }, 8000);
         load();
     </script>
 </body>
