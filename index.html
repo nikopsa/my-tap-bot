@@ -6,27 +6,26 @@
     <title>Fenix Evolution</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; --blue: #0088cc; --green: #2ecc71; }
-        body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
-        .header { padding: 15px; display: flex; justify-content: space-around; background: #111; }
-        .btn { padding: 12px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; flex: 1; font-weight: bold; margin: 0 4px; cursor: pointer; font-size: 11px; }
+        :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; }
+        body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        .header { padding: 10px; display: flex; flex-wrap: wrap; justify-content: center; background: #111; gap: 5px; }
+        .btn { padding: 10px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 10px; flex: 1; min-width: 80px; font-weight: bold; cursor: pointer; font-size: 10px; }
         #score { font-size: 45px; font-weight: 800; color: var(--gold); margin: 10px 0; }
-        .coin { width: 200px; height: 200px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s; z-index: 5; position: relative; }
+        .coin { width: 200px; height: 200px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s; position: relative; }
         .coin:active { transform: scale(0.9); }
         .progress-box { width: 85%; align-self: center; margin-bottom: 20px; }
         .bar-bg { width: 100%; height: 12px; background: #222; border-radius: 6px; border: 1px solid #444; overflow: hidden; }
         .bar-fill { height: 100%; background: linear-gradient(90deg, #ff4500, #ffd700); transition: width 0.3s; }
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 25px; box-sizing: border-box; overflow-y: auto; }
         .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); text-align: left; }
-        .plus { position: absolute; color: #fff; font-weight: bold; font-size: 30px; pointer-events: none; animation: fly 0.6s forwards; }
-        @keyframes fly { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="btn" onclick="showTop()">🏆 ТОП</div>
+        <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
         <div class="btn" onclick="showDaily()">🎁 БОНУС</div>
-        <div class="btn" onclick="showQuests()">📜 КВЕСТЫ</div>
+        <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
     </div>
 
     <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -41,7 +40,6 @@
             <span id="auto-text">⛏️ 0/s</span>
         </div>
         <div class="bar-bg"><div id="energy-fill" class="bar-fill"></div></div>
-        <div class="btn" style="width:100%; margin-top:15px;" onclick="showShop()">🛒 МАГАЗИН И БУСТЫ</div>
     </div>
 
     <div id="modal">
@@ -53,9 +51,9 @@
         let tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
         const APP_URL = "https://my-tap-bot.onrender.com";
-        const tapSnd = new Audio('https://www.soundjay.com/buttons/sounds/button-29.mp3');
+        const bot_username = "FenixTap_bot"; // Твой юзернейм бота
         let uid = tg.initDataUnsafe?.user?.id || 1292046104;
-        let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500, isSaving = false;
+        let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500;
 
         async function load() {
             try {
@@ -79,34 +77,36 @@
 
         document.getElementById('coin').onclick = (e) => {
             if(energy >= mult) {
-                tapSnd.currentTime = 0; tapSnd.play();
                 score += mult; energy -= mult;
-                createPlus(e.clientX, e.clientY);
                 updateUI();
                 if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
             }
         };
 
-        function createPlus(x,y) {
-            let p = document.createElement('div'); p.className='plus'; p.innerText='+'+mult;
-            p.style.left=x+'px'; p.style.top=y+'px';
-            document.body.appendChild(p); setTimeout(()=>p.remove(), 600);
-        }
-
         function openM(t, h) { 
             document.getElementById('m-title').innerText=t; 
-            document.getElementById('m-body').innerHTML=h + `<button class="btn" style="width:100%; background:#222; margin-top:20px;" onclick="closeM()">⬅️ НАЗАД</button>`;
+            document.getElementById('m-body').innerHTML=h + `<button class="btn" style="width:100%; background:#222; margin-top:20px; font-size:14px; color:#fff;" onclick="closeM()">⬅️ НАЗАД</button>`;
             document.getElementById('modal').style.display='block'; 
         }
         function closeM() { document.getElementById('modal').style.display='none'; }
 
+        function showFriends() {
+            let link = `https://t.me/${bot_username}?start=${uid}`;
+            let share = `https://t.me/share/url?url=${link}&text=Лети с Фениксом!`;
+            let h = `
+                <p>Зови друзей и получай 5,000 монет!</p>
+                <div class="shop-card" style="font-size:10px;">${link}</div>
+                <button class="btn" style="width:100%; background:var(--gold); color:black; font-size:14px;" onclick="tg.openTelegramLink('${share}')">🔗 ПОДЕЛИТЬСЯ</button>
+            `;
+            openM("👥 ДРУЗЬЯ", h);
+        }
+
         function showShop() {
             let cost = (auto + 1) * 1200;
             let h = `
-                <div class="shop-card"><span>⛏️ Майнер (+1/с)<br><small>Цена: ${cost} 🪙</small></span><button class="btn" onclick="buyM()">КУПИТЬ</button></div>
-                <div class="shop-card" style="border-color:var(--green)"><span>⚡ Энергия 5000<br><small>Цена: 100 ⭐</small></span><button class="btn" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
+                <div class="shop-card"><span>⛏️ Майнер (+1/с)<br><small>Цена: ${cost}</small></span><button class="btn" onclick="buyM()">КУПИТЬ</button></div>
+                <div class="shop-card" style="border-color:#2ecc71"><span>⚡ Энергия 5000<br><small>Цена: 100 ⭐</small></span><button class="btn" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
                 <div class="shop-card" style="border-color:var(--fire)"><span>🔥 Огненный Буст<br><small>+50/с на 7 дней | 300 ⭐</small></span><button class="btn" onclick="buyS('boost_7d')">ВЗЯТЬ</button></div>
-                <div class="shop-card" style="border-color:var(--blue)"><span>⭐ Король (+25/с)<br><small>Цена: 500 ⭐</small></span><button class="btn" onclick="buyS('star_mega')">ВЗЯТЬ</button></div>
             `;
             openM("🛒 МАГАЗИН", h);
         }
@@ -123,14 +123,6 @@
             if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') load(); });
         }
 
-        async function showTop() {
-            openM("🏆 ТОП", "Загрузка...");
-            let r = await fetch(`${APP_URL}/get_top`);
-            let d = await r.json();
-            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-            openM("🏆 ТОП", h);
-        }
-
         async function showDaily() {
             let r = await fetch(`${APP_URL}/daily_claim`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
             let d = await r.json();
@@ -138,13 +130,9 @@
             load();
         }
 
-        function showQuests() {
-            openM("📜 КВЕСТЫ", `<div class="shop-card"><span>📢 Канал<br><small>+5000 🪙</small></span><button class="btn" onclick="tg.showAlert('Скоро!')">ОТКРЫТЬ</button></div>`);
-        }
-
         setInterval(() => { if(auto>0){ score+=auto; updateUI(); } }, 1000);
         setInterval(async () => { 
-            if(!isSaving) { isSaving=true; await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); isSaving=false; }
+            await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})});
         }, 8000);
         load();
     </script>
