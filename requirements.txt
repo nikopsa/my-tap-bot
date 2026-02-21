@@ -1,8 +1,7 @@
+aiogram>=3.10.0
 fastapi
 uvicorn
-aiogram>=3.10.0
 sqlalchemy
 aiosqlite
 asyncpg
-jinja2
 httpx
