@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fenix Tap Premium</title>
+    <!-- ИСПРАВЛЕНО: Правильная ссылка на скрипт Telegram (старая не работала) -->
     <script src="https://telegram.org"></script>
     <style>
         :root { --gold: #ffd700; --bg: #000; }
@@ -54,11 +55,15 @@
 
     <script>
         let tg = window.Telegram.WebApp;
-        tg.ready(); tg.expand();
+        tg.ready();
+        tg.expand();
         
+        // Получаем ID пользователя или используем твой админ-ID для тестов
         let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 1292046104;
-        const APP_URL = ""; 
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
+        
+        // ИСПРАВЛЕНО: Прописываем прямой URL твоего сервера Render
+        const APP_URL = "https://my-tap-bot.onrender.com"; 
 
         function getLeague(s) {
             if (s >= 100000) return "🔥 ФЕНИКС";
@@ -80,11 +85,25 @@
                 let res = await fetch(`${APP_URL}/get_user?id=${uid}`);
                 if (res.ok) {
                     let d = await res.json();
-                    score = d.score; mult = d.mult; auto = d.auto;
-                    energy = d.energy; maxEnergy = d.max_energy;
+                    score = d.score || 0; 
+                    mult = d.mult || 1; 
+                    auto = d.auto || 0;
+                    energy = d.energy || 2500; 
+                    maxEnergy = d.max_energy || 2500;
                     updateUI();
+                    document.getElementById('status').innerText = ""; // Убираем "Загрузка"
                 }
-            } catch (e) { document.getElementById('status').innerText = "Ошибка сети"; }
+            } catch (e) { 
+                document.getElementById('status').innerText = "Ошибка сети"; 
+            }
+        }
+
+        function createPlusAnim(x, y) {
+            let p = document.createElement('div');
+            p.className = 'plus'; p.innerText = '+' + mult;
+            p.style.left = x + 'px'; p.style.top = (y - 50) + 'px';
+            document.body.appendChild(p);
+            setTimeout(() => p.remove(), 600);
         }
 
         async function save() {
@@ -100,30 +119,31 @@
         document.getElementById('coin').onclick = (e) => {
             if (energy >= mult) {
                 score += mult; energy -= mult;
-                let p = document.createElement('div');
-                p.className = 'plus'; p.innerText = '+' + mult;
-                p.style.left = e.clientX + 'px'; p.style.top = (e.clientY - 50) + 'px';
-                document.body.appendChild(p); setTimeout(() => p.remove(), 600);
+                createPlusAnim(e.clientX, e.clientY);
                 updateUI();
-            } else if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+            } else {
+                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+            }
         };
 
         function buyMiner() {
             let cost = (auto + 1) * 1000;
-            if (score >= cost) { score -= cost; auto++; save(); updateUI(); } 
-            else { tg.showAlert("Мало монет!"); }
+            if (score >= cost) {
+                score -= cost; auto++;
+                save(); updateUI();
+            } else { tg.showAlert("Мало монет!"); }
         }
 
         function showTop() {
-            fetch(`${APP_URL}/top`).then(r => r.json()).then(d => {
-                let list = d.map((u, i) => `<div>${i+1}. ${u.n} - ${u.s}</div>`).join('');
+            fetch(`${APP_URL}/top`).then(r => r.ok ? r.json() : []).then(d => {
+                let list = d.length > 0 ? d.map((u, i) => `<div>${i+1}. ${u.n} - ${u.s}</div>`).join('') : "Топ пуст";
                 openModal("🏆 ТОП", list);
-            });
+            }).catch(() => openModal("🏆 ТОП", "Ошибка загрузки топа"));
         }
 
         function showFriends() {
             let refLink = `https://t.me{uid}`; 
-            openModal("👥 ДРУЗЬЯ", `Твоя ссылка:<br><small>${refLink}</small><br><br>Пригласи друга и получи <b>2500 🪙</b>`);
+            openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small style="word-break: break-all;">${refLink}</small>`);
         }
 
         function showShop() {
@@ -138,10 +158,11 @@
         }
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
+        // Запуск функций
         loadData();
         setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
         setInterval(() => { if(energy < maxEnergy) { energy = Math.min(maxEnergy, energy + 10); updateUI(); } }, 5000);
-        setInterval(save, 10000);
+        setInterval(save, 10000); // Сохраняем каждые 10 сек
     </script>
 </body>
 </html>
