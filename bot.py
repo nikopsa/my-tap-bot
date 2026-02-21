@@ -1,5 +1,5 @@
-import os, asyncio, json, time, logging, httpx
-from datetime import datetime, timedelta
+import os, asyncio, json, time, logging
+from datetime import datetime
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,17 +7,17 @@ import uvicorn
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.types import LabeledPrice, PreCheckoutQuery, Update
-from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, select, desc, func, text, Boolean
+from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, select, desc, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# --- НАСТРОЙКИ ---
+# --- КОНФИГУРАЦИЯ ---
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 APP_URL = "https://my-tap-bot.onrender.com" 
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3").strip().replace("postgres://", "postgresql+asyncpg://")
-engine = create_async_engine(DB_URL, pool_pre_ping=True)
+engine = create_async_engine(DB_URL)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base()
 
@@ -26,12 +26,9 @@ class User(Base):
     user_id = Column(BigInteger, primary_key=True)
     username = Column(String)
     balance = Column(Integer, default=500)
-    tap_power = Column(Integer, default=1)
     auto_power = Column(Integer, default=0)
     energy = Column(Integer, default=2500)
     max_energy = Column(Integer, default=2500)
-    last_touch = Column(Integer, default=int(time.time()))
-    boost_end = Column(DateTime, nullable=True)
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -49,14 +46,14 @@ async def get_user(id: int):
         if not user:
             user = User(user_id=id)
             session.add(user); await session.commit(); await session.refresh(user)
-        return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
+        return {"score": user.balance, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
 @app.get("/get_top")
 async def get_top():
     async with async_session() as session:
         res = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
         users = res.scalars().all()
-        return [{"username": u.username or f"User_{str(u.user_id)[-4:]}", "balance": u.balance} for u in users]
+        return [{"username": u.username or f"Fenix_{str(u.user_id)[-4:]}", "balance": u.balance} for u in users]
 
 @app.post("/s")
 async def save(request: Request):
@@ -67,6 +64,40 @@ async def save(request: Request):
             user.balance, user.energy = int(d['score']), int(d['energy'])
             await session.commit()
     return {"ok": True}
+
+# --- ПЛАТЕЖИ (ЗВЕЗДЫ) ---
+@app.post("/create_invoice")
+async def create_invoice(request: Request):
+    d = await request.json()
+    prices = {
+        "energy_5k": ["⚡ Макс. Энергия 5000", 100],
+        "coins_1m": ["💰 1,000,000 Монет", 500]
+    }
+    item = prices.get(d['type'])
+    link = await bot.create_invoice_link(
+        title=item[0],
+        description="Мгновенное улучшение вашего Феникса",
+        payload=f"pay_{d['type']}_{d['id']}",
+        provider_token="", # Пусто для Telegram Stars
+        currency="XTR",
+        prices=[LabeledPrice(label=item[0], amount=item[1])]
+    )
+    return {"link": link}
+
+@dp.pre_checkout_query()
+async def pre_checkout(q: PreCheckoutQuery):
+    await q.answer(ok=True)
+
+@dp.message(F.successful_payment)
+async def on_pay(m: types.Message):
+    pay_data = m.successful_payment.invoice_payload.split('_')
+    item, uid = pay_data[1], int(pay_data[2])
+    async with async_session() as session:
+        user = await session.get(User, uid)
+        if user:
+            if item == "energy_5k": user.max_energy = 5000; user.energy = 5000
+            elif item == "coins_1m": user.balance += 1000000
+            await session.commit()
 
 @app.on_event("startup")
 async def on_startup():
@@ -81,7 +112,8 @@ async def webhook(request: Request):
 
 @dp.message(Command("start"))
 async def start(m: types.Message):
-    await m.answer("Феникс ждет!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]]))
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]])
+    await m.answer("Добро пожаловать в Fenix Tap!", reply_markup=kb)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
