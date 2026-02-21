@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import LabeledPrice, PreCheckoutQuery, Update
-from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, select, desc, func
+from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, select, desc, func, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -51,8 +51,8 @@ dp = Dispatcher()
 async def bot_webhook(request: Request):
     try:
         data = await request.json()
-        update = Update.model_validate(data, context={"bot": bot})
-        asyncio.create_task(dp.feed_update(bot, update))
+        update_obj = Update.model_validate(data, context={"bot": bot})
+        asyncio.create_task(dp.feed_update(bot, update_obj))
         return Response(content='ok', status_code=200)
     except Exception as e:
         logger.error(f"Error in webhook: {e}")
@@ -78,9 +78,15 @@ async def get_user(id: int):
         if not user:
             user = User(user_id=id, last_touch=int(time.time()))
             session.add(user); await session.commit(); await session.refresh(user)
+        
         now = int(time.time())
-        off = (now - user.last_touch) * user.auto_power
-        user.balance += off; user.last_touch = now; await session.commit()
+        # Если last_touch был None или 0, считаем от текущего момента
+        last_t = user.last_touch or now
+        off = (now - last_t) * (user.auto_power or 0)
+        
+        user.balance += off
+        user.last_touch = now
+        await session.commit()
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
 @app.post("/s")
@@ -90,13 +96,14 @@ async def save_user(request: Request):
     async with async_session() as session:
         user = await session.get(User, uid)
         if user:
-            user.balance, user.tap_power = int(data.get('score', user.balance)), int(data.get('mult', user.tap_power))
-            user.auto_power, user.energy = int(data.get('auto', user.auto_power)), int(data.get('energy', user.energy))
+            user.balance = int(data.get('score', user.balance))
+            user.tap_power = int(data.get('mult', user.tap_power))
+            user.auto_power = int(data.get('auto', user.auto_power))
+            user.energy = int(data.get('energy', user.energy))
             user.last_touch = int(time.time())
             await session.commit()
     return {"status": "ok"}
 
-# --- НОВОЕ: Эндпоинт для ТОП-10 ---
 @app.get("/top")
 async def get_top():
     async with async_session() as session:
@@ -113,9 +120,8 @@ async def start(m: types.Message, command: CommandObject):
     async with async_session() as session:
         user = await session.get(User, m.from_user.id)
         if not user:
-            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id)
+            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id, last_touch=int(time.time()))
             session.add(user)
-            # --- НОВОЕ: Начисление за реферала ---
             if ref_id:
                 referrer = await session.get(User, ref_id)
                 if referrer: referrer.balance += 2500
@@ -136,7 +142,18 @@ async def recovery():
 
 @app.on_event("startup")
 async def on_startup():
-    async with engine.begin() as conn: await conn.run_sync(Base.metadata.create_all)
+    # 1. Создаем таблицы, если их нет
+    async with engine.begin() as conn: 
+        await conn.run_sync(Base.metadata.create_all)
+        
+        # 2. ПАТЧ: Проверяем наличие колонки last_touch (специально для Postgres на Render)
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_touch INTEGER DEFAULT 0"))
+            logger.info("Column last_touch added successfully.")
+        except Exception as e:
+            # Если колонка уже есть, Postgres выдаст ошибку, это нормально
+            logger.info(f"Column last_touch probably exists: {e}")
+
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     asyncio.create_task(recovery())
 
