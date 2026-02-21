@@ -12,7 +12,6 @@ from sqlalchemy import Column, BigInteger, Integer, String, DateTime, update, se
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Логирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ async def recovery():
                 await session.commit()
         except: pass
 
-# --- API ЭНДПОИНТЫ ---
+# --- API ---
 @app.get("/", response_class=HTMLResponse)
 async def index():
     with open("index.html", "r", encoding="utf-8") as f: return f.read()
@@ -81,16 +80,10 @@ async def get_user(id: int):
         
         bonus_auto = 50 if (user.boost_end and user.boost_end > datetime.utcnow()) else 0
         return {
-            "score": user.balance, "mult": user.tap_power, "auto": user.auto_power + bonus_auto, 
+            "score": user.balance, "mult": user.tap_power, 
+            "auto": user.auto_power + bonus_auto, 
             "energy": user.energy, "max_energy": user.max_energy
         }
-
-@app.get("/get_top")
-async def get_top():
-    async with async_session() as session:
-        res = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
-        users = res.scalars().all()
-        return [{"username": u.username or f"Fenix_{str(u.user_id)[-4:]}", "balance": u.balance} for u in users]
 
 @app.post("/s")
 async def save(request: Request):
@@ -107,18 +100,12 @@ async def daily_claim(request: Request):
     d = await request.json()
     async with async_session() as session:
         user = await session.get(User, int(d['id']))
-        if not user: return {"status": "error", "message": "User not found"}
-        
         now = datetime.utcnow()
         delta = (now - user.last_checkin).total_seconds() / 3600
-        
-        if delta < 24:
-            return {"status": "error", "message": f"Жди {int(24-delta)}ч."}
-            
+        if delta < 24: return {"status": "error", "message": f"Жди {int(24-delta)}ч."}
         user.streak = (user.streak + 1) if delta < 48 else 1
         bonus = min(user.streak * 1000, 10000)
-        user.balance += bonus
-        user.last_checkin = now
+        user.balance += bonus; user.last_checkin = now
         await session.commit()
         return {"status": "ok", "bonus": bonus}
 
@@ -140,12 +127,11 @@ async def cmi(request: Request):
     d = await request.json()
     p = {
         "star_mini": ["Птенец", 150, 5], "star_mega": ["Король", 500, 25],
-        "boost_7d": ["Огненный Буст (7 дней)", 300, 50], "energy_5k": ["Энергия 5000", 100, 0]
+        "boost_7d": ["Огненный Буст", 300, 50], "energy_5k": ["Энергия 5000", 100, 0]
     }.get(d['type'])
     link = await bot.create_invoice_link(title=p[0], description="Улучшение", payload=f"pay_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label="Stars", amount=p[1])])
     return {"link": link}
 
-# --- ПЛАТЕЖИ ---
 @dp.pre_checkout_query()
 async def pre(q: PreCheckoutQuery): await q.answer(ok=True)
 
@@ -162,7 +148,6 @@ async def pay_ok(m: types.Message):
             elif t == "boost_7d": user.boost_end = datetime.utcnow() + timedelta(days=7)
             await session.commit()
 
-# --- СТАРТ ---
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
@@ -181,9 +166,19 @@ async def webhook(request: Request):
     return Response(content='ok')
 
 @dp.message(Command("start"))
-async def start(m: types.Message):
+async def start(m: types.Message, command: CommandObject):
+    ref_id = int(command.args) if command.args and command.args.isdigit() else None
+    async with async_session() as session:
+        user = await session.get(User, m.from_user.id)
+        if not user:
+            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id)
+            session.add(user)
+            if ref_id:
+                referrer = await session.get(User, ref_id)
+                if referrer: referrer.balance += 5000
+            await session.commit()
     kb = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL)).as_markup()
-    await m.answer("Феникс ждет тебя!", reply_markup=kb)
+    await m.answer("Феникс пробудился!", reply_markup=kb)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
