@@ -21,7 +21,7 @@
         #energy-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00ff00, #adff2f); transition: width 0.3s; }
         .footer-btns { padding: 15px; display: flex; justify-content: space-around; }
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; padding: 20px; box-sizing: border-box; }
-        .modal-content { margin-top: 50px; }
+        .modal-content { margin-top: 50px; color: white; }
         .plus { position: absolute; color: white; font-weight: bold; font-size: 28px; animation: flyUp 0.6s forwards; pointer-events: none; }
         @keyframes flyUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
     </style>
@@ -59,9 +59,12 @@
         tg.ready();
         tg.expand();
         
+        // Получаем ID пользователя
         let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
-        const APP_URL = "https://my-tap-bot.onrender.com"; 
+        
+        // Оставляем пустым, чтобы запросы шли на тот же домен
+        const APP_URL = ""; 
 
         function getLeague(s) {
             if (s >= 100000) return "🔥 ФЕНИКС";
@@ -83,23 +86,17 @@
                 let res = await fetch(`${APP_URL}/get_user?id=${uid}`);
                 if (res.ok) {
                     let d = await res.json();
-                    score = d.score || 0; mult = d.mult || 1; auto = d.auto || 0;
-                    energy = d.energy || 2500; maxEnergy = d.max_energy || 2500;
+                    score = d.score || 0; 
+                    mult = d.mult || 1; 
+                    auto = d.auto || 0;
+                    energy = d.energy || 2500; 
+                    maxEnergy = d.max_energy || 2500;
                     updateUI();
                 }
-            } catch (e) { document.getElementById('status').innerText = "Ошибка сети"; }
-        }
-        loadData();
-
-        document.getElementById('coin').onclick = (e) => {
-            if (energy >= mult) {
-                score += mult; energy -= mult;
-                createPlusAnim(e.clientX, e.clientY);
-                updateUI();
-            } else {
-                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+            } catch (e) { 
+                document.getElementById('status').innerText = "Ошибка сети"; 
             }
-        };
+        }
 
         function createPlusAnim(x, y) {
             let p = document.createElement('div');
@@ -114,10 +111,20 @@
                 await fetch(`${APP_URL}/s`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy), max_energy: maxEnergy})
+                    body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy)})
                 });
             } catch (e) {}
         }
+
+        document.getElementById('coin').onclick = (e) => {
+            if (energy >= mult) {
+                score += mult; energy -= mult;
+                createPlusAnim(e.clientX, e.clientY);
+                updateUI();
+            } else {
+                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+            }
+        };
 
         function buyMiner() {
             let cost = (auto + 1) * 1000;
@@ -135,21 +142,28 @@
         }
 
         function showFriends() {
-            let refLink = `https://t.me{uid}`; // ЗАМЕНИ НА СВОЕГО БОТА
-            openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small>${refLink}</small>`);
+            // Замени на актуальную ссылку своего бота
+            let refLink = `https://t.me{uid}`; 
+            openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small style="word-break: break-all;">${refLink}</small>`);
         }
 
         function showShop() {
             let cost = (auto + 1) * 1000;
-            openModal("🛒 МАГАЗИН", `<p>Майнер (+1/с): <b>${cost} 🪙</b></p><button class="btn" style="width:100%" onclick="buyMiner()">КУПИТЬ</button>`);
+            openModal("🛒 МАГАЗИН", `<p>Майнер (+1/с): <b>${cost} 🪙</b></p><div class="btn" style="width:100%" onclick="buyMiner()">КУПИТЬ</div>`);
         }
 
-        function openModal(t, h) { document.getElementById('modal-title').innerText = t; document.getElementById('modal-body').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
+        function openModal(t, h) { 
+            document.getElementById('modal-title').innerText = t; 
+            document.getElementById('modal-body').innerHTML = h; 
+            document.getElementById('modal').style.display = 'block'; 
+        }
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
+        // Запуск
+        loadData();
         setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
         setInterval(() => { if(energy < maxEnergy) { energy = Math.min(maxEnergy, energy + 10); updateUI(); } }, 5000);
-        setInterval(save, 15000);
+        setInterval(save, 10000); // Сохраняем каждые 10 сек
     </script>
 </body>
 </html>
