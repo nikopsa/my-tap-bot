@@ -47,16 +47,23 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# --- ИЗМЕНЕНО: Обработка вебхука стала быстрее для Telegram ---
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
     try:
         data = await request.json()
         update = Update.model_validate(data, context={"bot": bot})
-        await dp.feed_update(bot, update)
-        return {"ok": True}
+        # create_task позволяет FastAPI сразу ответить "200 OK", пока бот думает
+        asyncio.create_task(dp.feed_update(bot, update))
+        return Response(content='ok', status_code=200)
     except Exception as e:
         logger.error(f"Error in webhook: {e}")
-        return {"ok": False, "error": str(e)}
+        return Response(content='error', status_code=500)
+
+# --- ДОБАВЛЕНО: Снимает "загрузку" с инлайн-кнопок ---
+@dp.callback_query()
+async def close_loading_spinner(callback: types.CallbackQuery):
+    await callback.answer()
 
 @app.get("/", response_class=HTMLResponse)
 @app.head("/")
@@ -69,7 +76,6 @@ async def serve_index(request: Request):
             return f.read()
     return "<h1>index.html не найден. Бот работает.</h1>"
 
-# --- КОРРЕКТИРОВКА: Изменен путь и аргумент для связи с HTML ---
 @app.get("/get_user")
 async def get_user(id: int):
     async with async_session() as session:
@@ -85,7 +91,7 @@ async def get_user(id: int):
 @app.post("/s")
 async def save_user(request: Request):
     data = await request.json()
-    uid = int(data.get('id')) # Корректировка: получение ID из JSON
+    uid = int(data.get('id'))
     async with async_session() as session:
         user = await session.get(User, uid)
         if user:
@@ -119,6 +125,7 @@ async def on_startup():
     async with engine.begin() as conn: 
         await conn.run_sync(Base.metadata.create_all)
     webhook_url = f"{APP_URL}{WEBHOOK_PATH}"
+    # drop_pending_updates=True очистит очередь, если бот "завис"
     await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     logger.info(f"--- БОТ ЗАПУЩЕН ЧЕРЕЗ WEBHOOK: {webhook_url} ---")
     asyncio.create_task(recovery())
