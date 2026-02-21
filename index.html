@@ -6,28 +6,20 @@
     <title>Fenix Evolution</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; }
-        body { background: var(--bg); color: #fff; text-align: center; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
-        .header { padding: 15px; display: flex; justify-content: space-around; background: rgba(20,20,20,0.8); }
-        .btn { padding: 12px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; flex: 1; font-weight: bold; margin: 0 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
-        .btn:active { transform: scale(0.95); background: var(--gold); color: #000; }
-        #score { font-size: 48px; font-weight: 800; color: var(--gold); margin: 10px 0; text-shadow: 0 0 20px rgba(255,215,0,0.4); }
-        
-        .game-area { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
-        .fenix-container { position: relative; width: 280px; height: 280px; display: flex; justify-content: center; align-items: center; }
-        .fenix-bg { position: absolute; width: 100%; height: 100%; background: url('https://img.freepik.com/premium-photo/fire-phoenix-bird-flying-from-flame-generative-ai_1034449-31.jpg') center/cover; border-radius: 50%; opacity: 0.3; filter: blur(4px); animation: pulse 4s infinite ease-in-out; }
-        .main-button { position: relative; z-index: 5; width: 220px; height: 220px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 8px solid var(--gold); font-size: 90px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 50px rgba(255,69,0,0.5); cursor: pointer; transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .main-button:active { transform: scale(0.9); }
-
-        .progress-container { width: 85%; margin-bottom: 25px; align-self: center; }
-        .bar-bg { width: 100%; height: 14px; background: #222; border-radius: 7px; border: 1px solid #444; overflow: hidden; position: relative; }
-        .bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff4500, #ffd700); transition: width 0.3s; }
-        
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 25px; box-sizing: border-box; }
-        .plus { position: absolute; color: #fff; font-weight: bold; font-size: 32px; pointer-events: none; animation: fly 0.7s forwards; text-shadow: 0 0 10px #ff4500; }
-        @keyframes fly { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-150px) scale(1.5); } }
-        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.2; } 50% { transform: scale(1.15); opacity: 0.4; } }
-        .shop-card { background: #111; padding: 15px; border-radius: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid var(--gold); }
+        :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; --blue: #0088cc; --green: #2ecc71; }
+        body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
+        .header { padding: 15px; display: flex; justify-content: space-around; background: #111; }
+        .btn { padding: 12px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; flex: 1; font-weight: bold; margin: 0 4px; cursor: pointer; font-size: 11px; }
+        #score { font-size: 45px; font-weight: 800; color: var(--gold); margin: 10px 0; }
+        .coin { width: 200px; height: 200px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s; z-index: 5; position: relative; }
+        .coin:active { transform: scale(0.9); }
+        .progress-box { width: 85%; align-self: center; margin-bottom: 20px; }
+        .bar-bg { width: 100%; height: 12px; background: #222; border-radius: 6px; border: 1px solid #444; overflow: hidden; }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, #ff4500, #ffd700); transition: width 0.3s; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 25px; box-sizing: border-box; overflow-y: auto; }
+        .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); text-align: left; }
+        .plus { position: absolute; color: #fff; font-weight: bold; font-size: 30px; pointer-events: none; animation: fly 0.6s forwards; }
+        @keyframes fly { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
     </style>
 </head>
 <body>
@@ -37,28 +29,24 @@
         <div class="btn" onclick="showQuests()">📜 КВЕСТЫ</div>
     </div>
 
-    <div class="game-area">
+    <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
         <div id="score">0</div>
-        <div id="rank-text" style="color:var(--gold); font-weight:bold; margin-bottom:10px;">ЯЙЦО ФЕНИКСА</div>
-        <div class="fenix-container">
-            <div class="fenix-bg"></div>
-            <div id="coin" class="main-button">🥚</div>
-        </div>
+        <div id="rank" style="color:var(--gold); font-weight:bold; margin-bottom:10px;">ЯЙЦО</div>
+        <div id="coin" class="coin">🥚</div>
     </div>
 
-    <div class="progress-container">
-        <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+    <div class="progress-box">
+        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:5px;">
             <span id="energy-text">⚡ 2500 / 2500</span>
             <span id="auto-text">⛏️ 0/s</span>
         </div>
         <div class="bar-bg"><div id="energy-fill" class="bar-fill"></div></div>
-        <div class="header" style="background:none;"><div class="btn" style="width:100%" onclick="showShop()">🛒 УЛУЧШИТЬ МАЙНИНГ</div></div>
+        <div class="btn" style="width:100%; margin-top:15px;" onclick="showShop()">🛒 МАГАЗИН И БУСТЫ</div>
     </div>
 
     <div id="modal">
-        <h2 id="m-title" style="color:var(--gold)"></h2>
-        <div id="m-body" style="margin:20px 0;"></div>
-        <div class="btn" style="width:100%; margin-top:20px;" onclick="closeM()">ЗАКРЫТЬ</div>
+        <h2 id="m-title" style="color:var(--gold); margin-top:0;"></h2>
+        <div id="m-body"></div>
     </div>
 
     <script>
@@ -75,7 +63,7 @@
                 let d = await r.json();
                 score = d.score; mult = d.mult; auto = d.auto; energy = d.energy; maxE = d.max_energy;
                 updateUI();
-            } catch(e) { console.log("Load error"); }
+            } catch(e) {}
         }
 
         function updateUI() {
@@ -83,13 +71,10 @@
             document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxE}`;
             document.getElementById('energy-fill').style.width = (energy/maxE*100) + "%";
             document.getElementById('auto-text').innerText = `⛏️ ${auto}/s`;
-            
-            // Эволюция
-            let btn = document.getElementById('coin');
-            let rank = document.getElementById('rank-text');
-            if(score < 50000) { btn.innerText = "🥚"; rank.innerText = "ЯЙЦО ФЕНИКСА"; }
-            else if(score < 500000) { btn.innerText = "🐣"; rank.innerText = "МОЛОДОЙ ПТЕНЕЦ"; }
-            else { btn.innerText = "🔥"; rank.innerText = "ЛЕГЕНДАРНЫЙ ФЕНИКС"; }
+            let c = document.getElementById('coin'), r = document.getElementById('rank');
+            if(score < 50000) { c.innerText="🥚"; r.innerText="ЯЙЦО"; }
+            else if(score < 500000) { c.innerText="🐣"; r.innerText="ПТЕНЕЦ"; }
+            else { c.innerText="🔥"; r.innerText="ФЕНИКС"; }
         }
 
         document.getElementById('coin').onclick = (e) => {
@@ -98,36 +83,30 @@
                 score += mult; energy -= mult;
                 createPlus(e.clientX, e.clientY);
                 updateUI();
-                if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+                if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
             }
         };
 
-        function createPlus(x, y) {
-            let p = document.createElement('div'); p.className = 'plus'; p.innerText = '+'+mult;
-            p.style.left = x + 'px'; p.style.top = y + 'px';
-            document.body.appendChild(p); setTimeout(()=>p.remove(), 700);
+        function createPlus(x,y) {
+            let p = document.createElement('div'); p.className='plus'; p.innerText='+'+mult;
+            p.style.left=x+'px'; p.style.top=y+'px';
+            document.body.appendChild(p); setTimeout(()=>p.remove(), 600);
         }
 
-        async function showTop() {
-            openM("🏆 ЛУЧШИЕ ИГРОКИ", "Загрузка...");
-            let r = await fetch(`${APP_URL}/get_top`);
-            let d = await r.json();
-            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-            document.getElementById('m-body').innerHTML = h;
+        function openM(t, h) { 
+            document.getElementById('m-title').innerText=t; 
+            document.getElementById('m-body').innerHTML=h + `<button class="btn" style="width:100%; background:#222; margin-top:20px;" onclick="closeM()">⬅️ НАЗАД</button>`;
+            document.getElementById('modal').style.display='block'; 
         }
-
-        async function showDaily() {
-            let r = await fetch(`${APP_URL}/daily_claim`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
-            let d = await r.json();
-            tg.showAlert(d.status === "ok" ? `✅ Получено ${d.bonus} монет!` : d.message);
-            load();
-        }
+        function closeM() { document.getElementById('modal').style.display='none'; }
 
         function showShop() {
             let cost = (auto + 1) * 1200;
             let h = `
-                <div class="shop-card"><span>⛏️ Базовый майнер<br><small>+1/сек | Цена: ${cost}</small></span><button class="btn" onclick="buyM()">КУПИТЬ</button></div>
-                <div class="shop-card" style="border-color:#0088cc"><span>⭐ Мини-Феникс<br><small>+5/сек | Цена: 150 Звезд</small></span><button class="btn" onclick="buyS('star_mini')">ВЗЯТЬ</button></div>
+                <div class="shop-card"><span>⛏️ Майнер (+1/с)<br><small>Цена: ${cost} 🪙</small></span><button class="btn" onclick="buyM()">КУПИТЬ</button></div>
+                <div class="shop-card" style="border-color:var(--green)"><span>⚡ Энергия 5000<br><small>Цена: 100 ⭐</small></span><button class="btn" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
+                <div class="shop-card" style="border-color:var(--fire)"><span>🔥 Огненный Буст<br><small>+50/с на 7 дней | 300 ⭐</small></span><button class="btn" onclick="buyS('boost_7d')">ВЗЯТЬ</button></div>
+                <div class="shop-card" style="border-color:var(--blue)"><span>⭐ Король (+25/с)<br><small>Цена: 500 ⭐</small></span><button class="btn" onclick="buyS('star_mega')">ВЗЯТЬ</button></div>
             `;
             openM("🛒 МАГАЗИН", h);
         }
@@ -138,26 +117,34 @@
             if(d.ok) { score=d.balance; auto=d.auto; updateUI(); showShop(); } else tg.showAlert("Мало монет!");
         }
 
-        function showQuests() {
-            openM("📜 КВЕСТЫ", `<div class="shop-card"><span>📢 Канал Fenix<br><small>Награда: 5,000</small></span><button class="btn" onclick="tg.showAlert('Скоро!')">ПЕРЕЙТИ</button></div>`);
-        }
-
         async function buyS(t) {
             let r = await fetch(`${APP_URL}/create_miner_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:t})});
             let d = await r.json();
             if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') load(); });
         }
 
-        function openM(t, h) { document.getElementById('m-title').innerText=t; document.getElementById('m-body').innerHTML=h; document.getElementById('modal').style.display='block'; }
-        function closeM() { document.getElementById('modal').style.display='none'; }
-        
+        async function showTop() {
+            openM("🏆 ТОП", "Загрузка...");
+            let r = await fetch(`${APP_URL}/get_top`);
+            let d = await r.json();
+            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
+            openM("🏆 ТОП", h);
+        }
+
+        async function showDaily() {
+            let r = await fetch(`${APP_URL}/daily_claim`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d = await r.json();
+            tg.showAlert(d.status === "ok" ? "Бонус получен!" : d.message);
+            load();
+        }
+
+        function showQuests() {
+            openM("📜 КВЕСТЫ", `<div class="shop-card"><span>📢 Канал<br><small>+5000 🪙</small></span><button class="btn" onclick="tg.showAlert('Скоро!')">ОТКРЫТЬ</button></div>`);
+        }
+
         setInterval(() => { if(auto>0){ score+=auto; updateUI(); } }, 1000);
         setInterval(async () => { 
-            if(!isSaving) { 
-                isSaving=true; 
-                await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); 
-                isSaving=false; 
-            }
+            if(!isSaving) { isSaving=true; await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); isSaving=false; }
         }, 8000);
         load();
     </script>
