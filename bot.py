@@ -79,7 +79,8 @@ async def get_user(id: int):
             user = User(user_id=id, last_touch=int(time.time()))
             session.add(user); await session.commit(); await session.refresh(user)
         now = int(time.time())
-        off = (now - user.last_touch) * user.auto_power
+        # Безопасный расчет профита
+        off = (now - (user.last_touch or now)) * (user.auto_power or 0)
         user.balance += off; user.last_touch = now; await session.commit()
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
@@ -90,8 +91,10 @@ async def save_user(request: Request):
     async with async_session() as session:
         user = await session.get(User, uid)
         if user:
-            user.balance, user.tap_power = int(data.get('score', user.balance)), int(data.get('mult', user.tap_power))
-            user.auto_power, user.energy = int(data.get('auto', user.auto_power)), int(data.get('energy', user.energy))
+            user.balance = int(data.get('score', user.balance))
+            user.tap_power = int(data.get('mult', user.tap_power))
+            user.auto_power = int(data.get('auto', user.auto_power))
+            user.energy = int(data.get('energy', user.energy))
             user.last_touch = int(time.time())
             await session.commit()
     return {"status": "ok"}
@@ -112,7 +115,7 @@ async def start(m: types.Message, command: CommandObject):
     async with async_session() as session:
         user = await session.get(User, m.from_user.id)
         if not user:
-            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id)
+            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id, last_touch=int(time.time()))
             session.add(user)
             if ref_id:
                 referrer = await session.get(User, ref_id)
@@ -134,11 +137,18 @@ async def recovery():
 
 @app.on_event("startup")
 async def on_startup():
-    async with engine.begin() as conn: 
-        # Удаляем и создаем заново, чтобы база соответствовала коду
-        await conn.run_sync(Base.metadata.drop_all)
+    async with engine.begin() as conn:
+        # УДАЛЯЕМ старые таблицы С КАСКАДОМ, чтобы убрать конфликты с user_tasks
+        try:
+            await conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+            logger.info("Table 'users' dropped with CASCADE.")
+        except Exception as e:
+            logger.error(f"Error dropping table: {e}")
+            
+        # Создаем всё заново по текущей модели
         await conn.run_sync(Base.metadata.create_all)
-    
+        logger.info("Database RE-CREATED successfully.")
+
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     asyncio.create_task(recovery())
 
