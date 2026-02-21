@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background: #000; color: #fff; text-align: center; font-family: sans-serif; margin: 0; padding: 0; }
+        body { background: #000; color: #fff; text-align: center; font-family: sans-serif; margin: 0; padding: 0; overflow: hidden; }
         .header { display: flex; padding: 10px; gap: 10px; background: #111; }
         .btn { flex: 1; padding: 12px; background: #222; border: 1px solid #ffd700; color: #ffd700; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        #score { font-size: 40px; color: #ffd700; margin: 20px 0; }
-        .coin { width: 200px; height: 200px; background: orange; border-radius: 50%; margin: 20px auto; display: flex; align-items: center; justify-content: center; font-size: 80px; border: 5px solid #ffd700; cursor: pointer; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; padding: 20px; box-sizing: border-box; }
-        .progress { width: 80%; height: 10px; background: #222; margin: 10px auto; border-radius: 5px; overflow: hidden; }
-        .fill { height: 100%; background: #ffd700; width: 100%; }
+        #score { font-size: 45px; color: #ffd700; margin: 20px 0; font-weight: bold; }
+        .coin { width: 220px; height: 220px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; margin: 20px auto; display: flex; align-items: center; justify-content: center; font-size: 90px; border: 5px solid #ffd700; cursor: pointer; box-shadow: 0 0 20px #ff4500; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .shop-item { padding: 15px; border: 1px solid #333; margin-bottom: 10px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; background: #111; }
+        .progress { width: 85%; height: 12px; background: #222; margin: 10px auto; border-radius: 6px; overflow: hidden; border: 1px solid #444; }
+        .fill { height: 100%; background: linear-gradient(90deg, #ff4500, #ffd700); width: 100%; transition: width 0.3s; }
     </style>
 </head>
 <body>
@@ -24,25 +25,25 @@
     <div id="score">0</div>
     <div id="coin" class="coin">🥚</div>
     
-    <div style="font-size: 14px;">⚡ <span id="e-text">2500/2500</span> | ⛏️ <span id="a-text">0</span>/s</div>
+    <div style="font-size: 14px; margin-top: 10px;">⚡ <span id="e-text">2500/2500</span> | ⛏️ <span id="a-text">0</span>/s</div>
     <div class="progress"><div id="e-fill" class="fill"></div></div>
 
     <div id="modal">
         <h2 id="m-title" style="color:#ffd700"></h2>
-        <div id="m-body" style="text-align: left;"></div>
-        <button class="btn" style="width:100%; margin-top:20px;" onclick="document.getElementById('modal').style.display='none'">НАЗАД</button>
+        <div id="m-body"></div>
+        <button class="btn" style="width:100%; margin-top:20px; background: #111;" onclick="document.getElementById('modal').style.display='none'">НАЗАД</button>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         const APP_URL = "https://my-tap-bot.onrender.com";
         let uid = tg.initDataUnsafe?.user?.id || 12345;
-        let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500;
+        let score = 0, auto = 0, energy = 2500, maxE = 2500;
 
         async function load() {
             let r = await fetch(`${APP_URL}/get_user?id=${uid}`);
             let d = await r.json();
-            score = d.score; mult = d.mult; auto = d.auto; energy = d.energy; maxE = d.max_energy;
+            score = d.score; auto = d.auto; energy = d.energy; maxE = d.max_energy;
             updateUI();
         }
 
@@ -54,24 +55,24 @@
         }
 
         document.getElementById('coin').onclick = () => {
-            if(energy >= mult) { score += mult; energy -= mult; updateUI(); }
+            if(energy >= 1) { score += 1; energy -= 1; updateUI(); if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); }
         };
 
         async function showTop() {
+            document.getElementById('m-title').innerText = "🏆 ЛИДЕРЫ";
+            document.getElementById('m-body').innerHTML = "Загрузка...";
+            document.getElementById('modal').style.display = 'block';
             let r = await fetch(`${APP_URL}/get_top`);
             let d = await r.json();
-            let h = d.map((u, i) => `<div style="padding:10px; border-bottom:1px solid #222;">${i+1}. ${u.username} - ${u.balance}</div>`).join('');
-            document.getElementById('m-title').innerText = "🏆 ЛИДЕРЫ";
+            let h = d.map((u, i) => `<div class="shop-item"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
             document.getElementById('m-body').innerHTML = h;
-            document.getElementById('modal').style.display = 'block';
         }
 
         function showShop() {
             let h = `
-                <div style="padding:15px; border:1px solid #ffd700; margin-bottom:10px; border-radius:10px; display:flex; justify-content:space-between;">
-                    <span>⛏️ Майнер (+1/с)</span>
-                    <button class="btn" style="flex:none; width:80px;" onclick="buyM()">КУПИТЬ</button>
-                </div>
+                <div class="shop-item"><span>⛏️ Майнер (+1/с)<br><small>${(auto+1)*1000} 🪙</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyM()">КУПИТЬ</button></div>
+                <div class="shop-item" style="border-color: #0088cc;"><span>⭐ 1,000,000 МОНЕТ<br><small>500 звёзд</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyS('coins_1m')">ВЗЯТЬ</button></div>
+                <div class="shop-item" style="border-color: #2ecc71;"><span>⭐ ЭНЕРГИЯ 5000<br><small>100 звёзд</small></span><button class="btn" style="flex:none; width:80px;" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
             `;
             document.getElementById('m-title').innerText = "🛒 МАГАЗИН";
             document.getElementById('m-body').innerHTML = h;
@@ -80,11 +81,17 @@
 
         function buyM() {
             let cost = (auto + 1) * 1000;
-            if(score >= cost) { score -= cost; auto += 1; updateUI(); } else { tg.showAlert("Мало монет!"); }
+            if(score >= cost) { score -= cost; auto += 1; updateUI(); showShop(); } else { tg.showAlert("Мало монет!"); }
+        }
+
+        async function buyS(t) {
+            let r = await fetch(`${APP_URL}/create_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:t})});
+            let d = await r.json();
+            if(d.link) tg.openInvoice(d.link, (status) => { if(status==='paid') { tg.showAlert("Успешно!"); load(); } });
         }
 
         setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
-        setInterval(() => { fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); }, 5000);
+        setInterval(() => { fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); }, 6000);
         load();
     </script>
 </body>
