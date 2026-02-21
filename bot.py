@@ -79,7 +79,6 @@ async def get_user(id: int):
             user = User(user_id=id, last_touch=int(time.time()))
             session.add(user); await session.commit(); await session.refresh(user)
         now = int(time.time())
-        # Безопасный расчет профита
         off = (now - (user.last_touch or now)) * (user.auto_power or 0)
         user.balance += off; user.last_touch = now; await session.commit()
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
@@ -108,10 +107,7 @@ async def get_top():
 
 @dp.message(Command("start"))
 async def start(m: types.Message, command: CommandObject):
-    ref_id = None
-    if command.args and command.args.isdigit():
-        ref_id = int(command.args)
-
+    ref_id = int(command.args) if command.args and command.args.isdigit() else None
     async with async_session() as session:
         user = await session.get(User, m.from_user.id)
         if not user:
@@ -122,8 +118,7 @@ async def start(m: types.Message, command: CommandObject):
                 if referrer: referrer.balance += 2500
             await session.commit()
     
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
+    kb = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
     await m.answer(f"Здарова! Заходи в игру.", reply_markup=kb.as_markup())
 
 async def recovery():
@@ -138,16 +133,12 @@ async def recovery():
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
-        # УДАЛЯЕМ старые таблицы С КАСКАДОМ, чтобы убрать конфликты с user_tasks
-        try:
-            await conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
-            logger.info("Table 'users' dropped with CASCADE.")
-        except Exception as e:
-            logger.error(f"Error dropping table: {e}")
-            
-        # Создаем всё заново по текущей модели
+        # ЗАКОММЕНТИРОВАНО: Чтобы база не удалялась при каждом обновлении
+        # await conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+        
+        # Создаем только те таблицы, которых нет
         await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database RE-CREATED successfully.")
+        logger.info("Database initialized.")
 
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     asyncio.create_task(recovery())
