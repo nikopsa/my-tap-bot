@@ -3,175 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fenix Tap Premium v1.0.1</title>
+    <title>Fenix Tap v1.3.0</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --gold: #ffd700; --bg: #000; }
-        body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
-        .header { padding: 15px; display: flex; justify-content: space-around; }
-        .btn { padding: 10px; background: #111; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; width: 42%; font-weight: bold; font-size: 13px; cursor: pointer; }
+        :root { --gold: #ffd700; --bg: #000; --star-blue: #0088cc; }
+        body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; touch-action: manipulation; }
+        .header { padding: 10px; display: flex; justify-content: space-around; gap: 5px; }
+        .btn { padding: 12px; background: #111; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; flex: 1; font-weight: bold; font-size: 11px; cursor: pointer; }
         #score { font-size: 50px; font-weight: bold; text-shadow: 0 0 15px var(--gold); }
-        #league { font-size: 18px; color: white; margin-top: 10px; font-weight: bold; letter-spacing: 1px; }
-        .coin-box { position: relative; margin: auto; display: flex; justify-content: center; align-items: center; }
-        .coin { width: 220px; height: 220px; background: radial-gradient(circle, #f39c12, #d35400); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 30px rgba(243, 156, 18, 0.5); }
+        
+        /* МОНЕТА И ФОН-ФЕНИКС */
+        .coin-box { position: relative; margin: auto; width: 280px; height: 280px; display: flex; justify-content: center; align-items: center; }
+        .fenix-bg { position: absolute; width: 100%; height: 100%; background: url('https://img.freepik.com/premium-photo/fire-phoenix-bird-flying-from-flame-generative-ai_1034449-31.jpg') no-repeat center; background-size: cover; border-radius: 50%; opacity: 0.35; filter: blur(2px); z-index: 1; animation: pulse-bg 3s infinite ease-in-out; }
+        .coin { position: relative; z-index: 2; width: 220px; height: 220px; background: radial-gradient(circle, rgba(243,156,18,0.8), rgba(211,84,0,0.9)); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.05s; box-shadow: 0 0 30px rgba(255,69,0,0.6); }
         .coin:active { transform: scale(0.92); }
+
         #energy-bar { width: 80%; height: 12px; background: #222; margin: 10px auto; border-radius: 6px; border: 1px solid #444; overflow: hidden; }
         #energy-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00ff00, #adff2f); transition: width 0.3s; }
-        .footer-btns { padding: 15px; display: flex; justify-content: space-around; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; padding: 20px; box-sizing: border-box; }
-        .modal-content { margin-top: 50px; color: white; }
+        
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .plus { position: absolute; color: white; font-weight: bold; font-size: 28px; animation: flyUp 0.6s forwards; pointer-events: none; }
+        
         @keyframes flyUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
-        #ver { font-size: 10px; opacity: 0.3; color: white; }
+        @keyframes pulse-bg { 0% { transform: scale(1); opacity: 0.3; } 50% { transform: scale(1.1); opacity: 0.5; } 100% { transform: scale(1); opacity: 0.3; } }
+        
+        .shop-item { display: flex; justify-content: space-between; align-items: center; background: #111; padding: 10px; border-radius: 10px; margin-bottom: 10px; border-left: 3px solid var(--gold); }
+        .shop-item.star { border-left-color: var(--star-blue); }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="btn" onclick="showTop()">🏆 ТОП</div>
         <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
+        <div class="btn" style="background: #222;" onclick="claimDaily()">🎁 БОНУС</div>
     </div>
+    
     <div>
-        <div id="league">🥉 БРОНЗА</div>
         <div id="score">0</div>
-        <div id="status" style="font-size: 12px; opacity: 0.7;">Загрузка системы...</div>
+        <div id="status" style="font-size: 11px; opacity: 0.6;">Загрузка...</div>
     </div>
+
     <div class="coin-box">
+        <div class="fenix-bg"></div>
         <div class="coin" id="coin">🔥</div>
     </div>
+
     <div>
-        <div id="energy-text" style="font-size: 14px; margin-bottom: 5px;">⚡ 2500 / 2500</div>
+        <div id="energy-text" style="font-size: 14px;">⚡ 2500 / 2500</div>
         <div id="energy-bar"><div id="energy-fill"></div></div>
-        <div id="ver">v1.0.1 - stability fix</div>
+        <div class="header">
+            <div class="btn" onclick="showShop()">🛒 МАГАЗИН МАЙНЕРОВ</div>
+        </div>
     </div>
-    <div class="footer-btns">
-        <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
-        <div class="btn" onclick="buyMiner()">⚙️ МАЙНЕР</div>
-    </div>
+
     <div id="modal">
         <h2 id="modal-title"></h2>
-        <div id="modal-body" class="modal-content"></div>
+        <div id="modal-body" style="margin-top:20px; color:white;"></div>
         <br>
         <div class="btn" style="width:100%" onclick="closeModal()">ЗАКРЫТЬ</div>
     </div>
 
     <script>
-        // ЛОВУШКА ОШИБОК
-        window.onerror = function(m, u, l) {
-            console.error("Ошибка: " + m + " на строке: " + l);
-        };
-
-        // КОРРЕКТИВА: Безопасная инициализация TG
-        let tg = window.Telegram ? window.Telegram.WebApp : null;
-        if (tg) {
-            tg.ready();
-            tg.expand();
-        }
+        let tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
         
-        const APP_URL = "https://my-tap-bot.onrender.com"; 
-        // Если tg не загружен, используем тестовый ID, чтобы код не падал
-        let uid = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 1292046104;
-        
+        const APP_URL = "https://my-tap-bot.onrender.com";
+        const BOT_NAME = "FenixTap_bot";
+        let uid = tg.initDataUnsafe?.user?.id || 1292046104;
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
-
-        function getLeague(s) {
-            if (s >= 100000) return "🔥 ФЕНИКС";
-            if (s >= 25000) return "🟡 ЗОЛОТО";
-            if (s >= 5000) return "⚪ СЕРЕБРО";
-            return "🥉 БРОНЗА";
-        }
-
-        function updateUI() {
-            const scoreEl = document.getElementById('score');
-            const leagueEl = document.getElementById('league');
-            const energyTextEl = document.getElementById('energy-text');
-            const energyFillEl = document.getElementById('energy-fill');
-            const statusEl = document.getElementById('status');
-
-            if(scoreEl) scoreEl.innerText = Math.floor(score);
-            if(leagueEl) leagueEl.innerText = getLeague(score);
-            if(energyTextEl) energyTextEl.innerText = `⚡ ${Math.floor(energy)} / ${maxEnergy}`;
-            if(energyFillEl) energyFillEl.style.width = (energy / maxEnergy * 100) + "%";
-            if(statusEl) statusEl.innerText = `Клик: +${mult} | Авто: ${auto}/с`;
-        }
+        let isSaving = false;
 
         async function loadData() {
             try {
-                let res = await fetch(`${APP_URL}/get_user?id=${uid}&t=${Date.now()}`);
-                if (res.ok) {
-                    let d = await res.json();
-                    score = d.score || 0; mult = d.mult || 1; auto = d.auto || 0;
-                    energy = d.energy || 2500; maxEnergy = d.max_energy || 2500;
-                    updateUI();
-                }
-            } catch (e) { 
-                console.log("Ожидание сервера...");
-                document.getElementById('status').innerText = "Офлайн режим"; 
-            }
+                let res = await fetch(`${APP_URL}/get_user?id=${uid}`);
+                let d = await res.json();
+                if(d.error === "banned") { document.body.innerHTML = "<h1>ЗАБАНЕН</h1>"; return; }
+                score = d.score; mult = d.mult; auto = d.auto; energy = d.energy; maxEnergy = d.max_energy;
+                updateUI();
+            } catch(e) { document.getElementById('status').innerText = "Ошибка сети"; }
         }
 
-        async function save() {
-            try {
-                await fetch(`${APP_URL}/s`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy)})
-                });
-            } catch (e) { /* Игнорируем ошибки автосохранения в консоли */ }
+        function updateUI() {
+            document.getElementById('score').innerText = Math.floor(score);
+            document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxEnergy}`;
+            document.getElementById('energy-fill').style.width = (energy/maxEnergy*100) + "%";
+            document.getElementById('status').innerText = `Клик: +${mult} | Майнинг: ${auto}/с`;
         }
 
         document.getElementById('coin').onclick = (e) => {
             if (energy >= mult) {
                 score += mult; energy -= mult;
-                let p = document.createElement('div');
-                p.className = 'plus'; p.innerText = '+' + mult;
-                p.style.left = e.clientX + 'px'; p.style.top = (e.clientY - 50) + 'px';
-                document.body.appendChild(p); setTimeout(() => p.remove(), 600);
+                let p = document.createElement('div'); p.className = 'plus'; p.innerText = '+'+mult;
+                p.style.left = e.clientX+'px'; p.style.top = (e.clientY - 40)+'px';
+                document.body.appendChild(p); setTimeout(()=>p.remove(), 600);
                 updateUI();
-            } else if (tg && tg.HapticFeedback) {
-                tg.HapticFeedback.notificationOccurred('error');
             }
         };
 
-        // КОРРЕКТИВА: Все функции кнопок теперь проверяют наличие tg
-        function buyMiner() {
+        function showShop() {
             let cost = (auto + 1) * 1000;
-            if (score >= cost) { 
-                score -= cost; auto++; save(); updateUI(); 
-            } else { 
-                if (tg && tg.showAlert) tg.showAlert("Недостаточно монет!"); 
-                else alert("Недостаточно монет!");
-            }
+            let h = `
+                <p style="color:var(--gold)">🪙 ЗА МОНЕТЫ</p>
+                <div class="shop-item">
+                    <span style="text-align:left"><b>Базовый</b> (+1/с)<br><small>Цена: ${cost} 🪙</small></span>
+                    <button class="btn" style="flex:0.4" onclick="buyMiner('basic')">КУПИТЬ</button>
+                </div>
+                <p style="color:var(--star-blue); margin-top:20px;">⭐ ЗА ЗВЕЗДЫ</p>
+                <div class="shop-item star">
+                    <span style="text-align:left"><b>Мини-Феникс</b> (+5/с)<br><small>Цена: 150 ⭐</small></span>
+                    <button class="btn" style="flex:0.4;background:var(--star-blue);color:white" onclick="buyStarMiner('star_mini')">ВЗЯТЬ</button>
+                </div>
+                <div class="shop-item star">
+                    <span style="text-align:left"><b>Мега-Феникс</b> (+25/с)<br><small>Цена: 500 ⭐</small></span>
+                    <button class="btn" style="flex:0.4;background:var(--star-blue);color:white" onclick="buyStarMiner('star_mega')">ВЗЯТЬ</button>
+                </div>
+                <div class="btn" style="background:var(--gold);color:black;width:100%;margin-top:15px" onclick="buy10k()">💰 +10,000 МОНЕТ (50 ⭐)</div>
+            `;
+            openModal("🛒 МАГАЗИН", h);
         }
 
-        function showTop() {
-            fetch(`${APP_URL}/top`).then(r => r.json()).then(d => {
-                let list = d.map((u, i) => `<div style="display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:5px"><span>${i+1}. ${u.n}</span> <b>${u.s}</b></div>`).join('');
-                openModal("🏆 ТОП", list || "Список пуст");
-            }).catch(() => alert("Не удалось загрузить ТОП"));
+        async function buyMiner(type) {
+            let res = await fetch(`${APP_URL}/buy_miner`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:type})});
+            let d = await res.json();
+            if(d.ok) { auto = d.auto; score = d.balance; updateUI(); showShop(); } else tg.showAlert("Не хватает монет!");
+        }
+
+        async function buyStarMiner(type) {
+            let res = await fetch(`${APP_URL}/create_miner_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:type})});
+            let d = await res.json();
+            if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') { loadData(); closeModal(); } });
+        }
+
+        async function buy10k() {
+            let res = await fetch(`${APP_URL}/create_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d = await res.json();
+            if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') { loadData(); closeModal(); } });
+        }
+
+        async function saveData() {
+            if(isSaving) return; isSaving = true;
+            try {
+                let res = await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy, mult:mult, auto:auto})});
+                let d = await res.json();
+                if(d.error === "security_trigger") loadData();
+            } catch(e) {} isSaving = false;
+        }
+
+        async function claimDaily() {
+            let res = await fetch(`${APP_URL}/daily_claim`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d = await res.json();
+            tg.showAlert(d.status === "ok" ? `Бонус: ${d.bonus} 🪙!` : d.message);
+            if(d.status === "ok") loadData();
         }
 
         function showFriends() {
-            let refLink = `https://t.me/share/url?url=https://t.me/YOUR_BOT_USERNAME?start=${uid}`; 
-            openModal("👥 ДРУЗЬЯ", `Твоя ссылка:<br><small>${refLink}</small><br><br>Пригласи друга и получи <b>2500 🪙</b>`);
+            let link = `https://t.me/${BOT_NAME}?start=${uid}`;
+            openModal("👥 ДРУЗЬЯ", `<p>+2500 🪙 за друга</p><div class="btn" onclick="tg.openTelegramLink('https://t.me/share/url?url='+encodeURIComponent('${link}'))">ОТПРАВИТЬ</div>`);
         }
 
-        function showShop() {
-            let cost = (auto + 1) * 1000;
-            openModal("🛒 МАГАЗИН", `<p>Майнер (+1/с): <b>${cost} 🪙</b></p><div class="btn" style="width:100%" onclick="buyMiner()">КУПИТЬ</div>`);
-        }
-
-        function openModal(t, h) { 
-            document.getElementById('modal-title').innerText = t; 
-            document.getElementById('modal-body').innerHTML = h; 
-            document.getElementById('modal').style.display = 'block'; 
-        }
+        function openModal(t, h) { document.getElementById('modal-title').innerText = t; document.getElementById('modal-body').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
-        // Запуск
-        loadData();
         setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
-        setInterval(() => { if(energy < maxEnergy) { energy = Math.min(maxEnergy, energy + 10); updateUI(); } }, 5000);
-        setInterval(save, 10000);
+        setInterval(saveData, 10000);
+        loadData();
     </script>
 </body>
 </html>
