@@ -45,7 +45,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- ФОНОВЫЕ ЗАДАЧИ ---
 async def keep_alive():
     async with httpx.AsyncClient() as client:
         while True:
@@ -58,11 +57,10 @@ async def recovery():
         await asyncio.sleep(60)
         try:
             async with async_session() as session:
-                await session.execute(update(User).where(User.energy < User.max_energy).values(energy=func.least(User.max_energy, User.energy + 20)))
+                await session.execute(update(User).where(User.energy < User.max_energy).values(energy=func.least(User.max_energy, User.energy + 25)))
                 await session.commit()
         except: pass
 
-# --- API ---
 @app.get("/", response_class=HTMLResponse)
 async def index():
     with open("index.html", "r", encoding="utf-8") as f: return f.read()
@@ -77,6 +75,13 @@ async def get_user(id: int):
         if user.is_banned: return {"error": "banned"}
         return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
+@app.get("/get_top")
+async def get_top():
+    async with async_session() as session:
+        res = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
+        users = res.scalars().all()
+        return [{"username": u.username or f"TapMaster_{str(u.user_id)[-4:]}", "balance": u.balance} for u in users]
+
 @app.post("/s")
 async def save(request: Request):
     d = await request.json()
@@ -86,9 +91,10 @@ async def save(request: Request):
         if user and not user.is_banned:
             now = int(time.time())
             seconds = max(1, now - user.last_touch)
-            max_gain = (user.tap_power * 15 * seconds) + (user.auto_power * seconds) + 150
+            # Лимит защиты + запас на эволюцию
+            max_gain = (user.tap_power * 18 * seconds) + (user.auto_power * seconds) + 500
             if (int(d['score']) - user.balance) > max_gain:
-                return {"ok": False, "error": "security_trigger"}
+                return {"ok": False, "error": "security"}
             user.balance, user.energy, user.last_touch = int(d['score']), int(d['energy']), now
             await session.commit()
     return {"ok": True}
@@ -96,34 +102,15 @@ async def save(request: Request):
 @app.post("/buy_miner")
 async def buy_miner(request: Request):
     d = await request.json()
-    uid = int(d['id'])
     async with async_session() as session:
-        user = await session.get(User, uid)
-        if not user or user.is_banned: return {"ok": False}
-        cost = (user.auto_power + 1) * 1000
+        user = await session.get(User, int(d['id']))
+        cost = (user.auto_power + 1) * 1200
         if user.balance >= cost:
             user.balance -= cost
             user.auto_power += 1
             await session.commit()
             return {"ok": True, "auto": user.auto_power, "balance": user.balance}
-        return {"ok": False, "error": "no_money"}
-
-@app.post("/create_miner_invoice")
-async def create_miner_invoice(request: Request):
-    d = await request.json()
-    plans = {
-        "star_mini": {"title": "Мини-Феникс (+5/с)", "price": 150, "power": 5},
-        "star_mega": {"title": "Мега-Феникс (+25/с)", "price": 500, "power": 25}
-    }
-    plan = plans.get(d['type'])
-    link = await bot.create_invoice_link(title=plan["title"], description=f"Буст +{plan['power']}/с", payload=f"miner_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label="Stars", amount=plan["price"])])
-    return {"link": link}
-
-@app.post("/create_invoice")
-async def create_inv(request: Request):
-    d = await request.json()
-    link = await bot.create_invoice_link(title="10,000 Монет", description="Пакет монет", payload=f"stars_10k_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label="Stars", amount=50)])
-    return {"link": link}
+        return {"ok": False}
 
 @app.post("/daily_claim")
 async def daily(request: Request):
@@ -132,14 +119,20 @@ async def daily(request: Request):
         user = await session.get(User, int(d['id']))
         now = datetime.utcnow()
         delta = (now - (user.last_checkin or (now - timedelta(days=2)))).total_seconds() / 3600
-        if delta < 24: return {"status": "error", "message": f"Жди {int(24-delta)}ч."}
+        if delta < 24: return {"status": "error", "message": f"Приходи через {int(24-delta)}ч."}
         user.streak = (user.streak + 1) if delta < 48 else 1
-        bonus = min(user.streak * 1000, 7000)
+        bonus = min(user.streak * 1500, 10000)
         user.balance += bonus; user.last_checkin = now
         await session.commit()
-        return {"status": "ok", "bonus": bonus, "streak": user.streak}
+        return {"status": "ok", "bonus": bonus}
 
-# --- TG HANDLERS ---
+@app.post("/create_miner_invoice")
+async def cmi(request: Request):
+    d = await request.json()
+    p = {"star_mini": ["Птенец-Помощник", 150, 5], "star_mega": ["Король Феникс", 500, 25]}.get(d['type'])
+    link = await bot.create_invoice_link(title=p[0], description=f"Автодоход +{p[2]}/с", payload=f"miner_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label="Stars", amount=p[1])])
+    return {"link": link}
+
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
     data = await request.json()
@@ -155,31 +148,31 @@ async def start(m: types.Message, command: CommandObject):
             user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id)
             session.add(user)
             if ref_id:
-                r = await session.get(User, ref_id); 
-                if r: r.balance += 2500
+                r = await session.get(User, ref_id)
+                if r: r.balance += 5000
             await session.commit()
-    kb = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
-    await m.answer(f"Привет! Нажимай кнопку ниже, чтобы начать игру.", reply_markup=kb.as_markup())
+    builder = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
+    await m.answer("Добро пожаловать в Fenix Tap! Вырасти свою легенду.", reply_markup=builder.as_markup())
 
 @dp.pre_checkout_query()
 async def pre(q: PreCheckoutQuery): await q.answer(ok=True)
 
 @dp.message(F.successful_payment)
 async def pay_ok(m: types.Message):
-    payload = m.successful_payment.invoice_payload.split('_')
-    action, uid = payload[0], int(payload[2])
+    pay = m.successful_payment.invoice_payload.split('_')
     async with async_session() as session:
-        user = await session.get(User, uid)
+        user = await session.get(User, int(pay[2]))
         if user:
-            if action == "stars": user.balance += 10000
-            elif action == "miner":
-                power = 5 if payload[1] == "star_mini" else 25
-                user.auto_power += power
+            power = 5 if pay[1] == "star_mini" else 25
+            user.auto_power += power
             await session.commit()
 
 @app.on_event("startup")
 async def on_startup():
-    async with engine.begin() as conn: await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn:
+        try: await conn.execute(text("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE"))
+        except: pass 
+        await conn.run_sync(Base.metadata.create_all)
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     asyncio.create_task(recovery()); asyncio.create_task(keep_alive())
 
