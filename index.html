@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fenix Tap Premium</title>
-    <!-- ИСПРАВЛЕНО: Правильный скрипт Telegram SDK -->
+    <!-- ИСПРАВЛЕНО: Правильное подключение Telegram WebApp SDK -->
     <script src="https://telegram.org"></script>
     <script src="https://sad.adsgram.ai"></script> 
     <style>
         :root { --gold: #ffd700; --bg: #000; }
-        body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; }
+        body { background: var(--bg); color: var(--gold); text-align: center; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; margin: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
         .header { padding: 15px; display: flex; justify-content: space-around; }
         .btn { padding: 10px; background: #111; border: 1px solid var(--gold); color: var(--gold); border-radius: 12px; width: 42%; font-weight: bold; font-size: 13px; cursor: pointer; }
         #score { font-size: 50px; font-weight: bold; text-shadow: 0 0 15px var(--gold); }
@@ -22,38 +22,31 @@
         .footer-btns { padding: 15px; display: flex; justify-content: space-around; }
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; padding: 20px; box-sizing: border-box; }
         .modal-content { margin-top: 50px; }
-        .ad-btn { background: #f39c12; color: #000; border: none; width: 100%; padding: 15px; border-radius: 12px; font-weight: bold; margin-bottom: 20px; font-size: 16px; }
         .plus { position: absolute; color: white; font-weight: bold; font-size: 28px; animation: flyUp 0.6s forwards; pointer-events: none; }
         @keyframes flyUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
     </style>
 </head>
 <body>
-
     <div class="header">
         <div class="btn" onclick="showTop()">🏆 ТОП</div>
         <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
     </div>
-
     <div>
         <div id="league">🥉 БРОНЗА</div>
         <div id="score">0</div>
-        <div id="status" style="font-size: 12px; opacity: 0.7;">Загрузка...</div>
+        <div id="status" style="font-size: 12px; opacity: 0.7;">Загрузка данных...</div>
     </div>
-
     <div class="coin-box">
         <div class="coin" id="coin">🔥</div>
     </div>
-
     <div>
         <div id="energy-text" style="font-size: 14px; margin-bottom: 5px;">⚡ 2500 / 2500</div>
         <div id="energy-bar"><div id="energy-fill"></div></div>
     </div>
-
     <div class="footer-btns">
         <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
         <div class="btn" onclick="buyMiner()">⚙️ МАЙНЕР</div>
     </div>
-
     <div id="modal">
         <h2 id="modal-title"></h2>
         <div id="modal-body" class="modal-content"></div>
@@ -66,7 +59,7 @@
         tg.ready();
         tg.expand();
         
-        let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 123;
+        let uid = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
         let score = 0, mult = 1, auto = 0, energy = 2500, maxEnergy = 2500;
         const APP_URL = "https://my-tap-bot.onrender.com"; 
 
@@ -85,27 +78,24 @@
             document.getElementById('status').innerText = `Клик: +${mult} | Авто: ${auto}/с`;
         }
 
-        // Загрузка данных
         async function loadData() {
             try {
                 let res = await fetch(`${APP_URL}/get_user?id=${uid}`);
                 if (res.ok) {
                     let d = await res.json();
-                    score = d.score; mult = d.mult; auto = d.auto || 0;
-                    energy = d.energy; maxEnergy = d.max_energy || 2500;
+                    score = d.score || 0; mult = d.mult || 1; auto = d.auto || 0;
+                    energy = d.energy || 2500; maxEnergy = d.max_energy || 2500;
                     updateUI();
                 }
             } catch (e) { document.getElementById('status').innerText = "Ошибка сети"; }
         }
         loadData();
 
-        // Клик
         document.getElementById('coin').onclick = (e) => {
             if (energy >= mult) {
                 score += mult; energy -= mult;
-                createPlusAnim(e.pageX, e.pageY);
+                createPlusAnim(e.clientX, e.clientY);
                 updateUI();
-                if (Math.random() > 0.9) save();
             } else {
                 if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
             }
@@ -114,17 +104,19 @@
         function createPlusAnim(x, y) {
             let p = document.createElement('div');
             p.className = 'plus'; p.innerText = '+' + mult;
-            p.style.left = x + 'px'; p.style.top = y + 'px';
+            p.style.left = x + 'px'; p.style.top = (y - 50) + 'px';
             document.body.appendChild(p);
             setTimeout(() => p.remove(), 600);
         }
 
-        function save() {
-            fetch(`${APP_URL}/s`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy), max_energy: maxEnergy})
-            });
+        async function save() {
+            try {
+                await fetch(`${APP_URL}/s`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: uid, score: Math.floor(score), mult: mult, auto: auto, energy: Math.floor(energy), max_energy: maxEnergy})
+                });
+            } catch (e) {}
         }
 
         function buyMiner() {
@@ -136,24 +128,20 @@
         }
 
         function showTop() {
-            fetch(`${APP_URL}/top`).then(r => r.json()).then(d => {
-                let list = d.map((u, i) => `<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>${i+1}. ${u.n}</span> <b>${u.s}</b></div>`).join('');
-                openModal("🏆 ТОП ИГРОКОВ", list);
-            });
+            fetch(`${APP_URL}/top`).then(r => r.ok ? r.json() : []).then(d => {
+                let list = d.length > 0 ? d.map((u, i) => `<div>${i+1}. ${u.n} - ${u.s}</div>`).join('') : "Топ пуст";
+                openModal("🏆 ТОП", list);
+            }).catch(() => openModal("🏆 ТОП", "Ошибка загрузки топа"));
         }
 
         function showFriends() {
-            let refLink = `https://t.me{uid}`;
+            let refLink = `https://t.me{uid}`; // ЗАМЕНИ НА СВОЕГО БОТА
             openModal("👥 ДРУЗЬЯ", `Пригласи друга и получи <b>2500 🪙</b><br><br><small>${refLink}</small>`);
         }
 
         function showShop() {
-            let content = `
-                <div style="text-align:left; padding: 10px;">
-                    🪙 Майнер (+1/с): <b>${(auto + 1) * 1000} 🪙</b> <button class="btn" style="width:70px" onclick="buyMiner()">КУПИТЬ</button>
-                </div>
-            `;
-            openModal("🛒 МАГАЗИН", content);
+            let cost = (auto + 1) * 1000;
+            openModal("🛒 МАГАЗИН", `<p>Майнер (+1/с): <b>${cost} 🪙</b></p><button class="btn" style="width:100%" onclick="buyMiner()">КУПИТЬ</button>`);
         }
 
         function openModal(t, h) { document.getElementById('modal-title').innerText = t; document.getElementById('modal-body').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
@@ -161,7 +149,7 @@
 
         setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
         setInterval(() => { if(energy < maxEnergy) { energy = Math.min(maxEnergy, energy + 10); updateUI(); } }, 5000);
-        setInterval(save, 20000);
+        setInterval(save, 15000);
     </script>
 </body>
 </html>
