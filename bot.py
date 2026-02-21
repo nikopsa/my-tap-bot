@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 # --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
-ADMIN_ID = 1292046104 
 APP_URL = "https://my-tap-bot.onrender.com" 
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 
@@ -51,25 +50,19 @@ dp = Dispatcher()
 async def bot_webhook(request: Request):
     try:
         data = await request.json()
-        update_obj = Update.model_validate(data, context={"bot": bot})
-        asyncio.create_task(dp.feed_update(bot, update_obj))
+        upd = Update.model_validate(data, context={"bot": bot})
+        asyncio.create_task(dp.feed_update(bot, upd))
         return Response(content='ok', status_code=200)
     except Exception as e:
-        logger.error(f"Error in webhook: {e}")
+        logger.error(f"Webhook error: {e}")
         return Response(content='error', status_code=500)
 
-@dp.callback_query()
-async def close_loading_spinner(callback: types.CallbackQuery):
-    await callback.answer()
-
 @app.get("/", response_class=HTMLResponse)
-@app.head("/")
-async def serve_index(request: Request):
-    if request.method == "HEAD": return Response(status_code=200)
+async def serve_index():
     file_path = os.path.join(os.getcwd(), "index.html")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f: return f.read()
-    return "<h1>index.html не найден.</h1>"
+    return "<h1>index.html not found</h1>"
 
 @app.get("/get_user")
 async def get_user(id: int):
@@ -80,10 +73,8 @@ async def get_user(id: int):
             session.add(user); await session.commit(); await session.refresh(user)
         
         now = int(time.time())
-        # Если last_touch был None или 0, считаем от текущего момента
         last_t = user.last_touch or now
         off = (now - last_t) * (user.auto_power or 0)
-        
         user.balance += off
         user.last_touch = now
         await session.commit()
@@ -92,13 +83,10 @@ async def get_user(id: int):
 @app.post("/s")
 async def save_user(request: Request):
     data = await request.json()
-    uid = int(data.get('id'))
     async with async_session() as session:
-        user = await session.get(User, uid)
+        user = await session.get(User, int(data.get('id')))
         if user:
             user.balance = int(data.get('score', user.balance))
-            user.tap_power = int(data.get('mult', user.tap_power))
-            user.auto_power = int(data.get('auto', user.auto_power))
             user.energy = int(data.get('energy', user.energy))
             user.last_touch = int(time.time())
             await session.commit()
@@ -108,28 +96,23 @@ async def save_user(request: Request):
 async def get_top():
     async with async_session() as session:
         res = await session.execute(select(User).order_by(User.balance.desc()).limit(10))
-        users = res.scalars().all()
-        return [{"n": u.username or f"ID{u.user_id}", "s": u.balance} for u in users]
+        return [{"n": u.username or f"ID{u.user_id}", "s": u.balance} for u in res.scalars().all()]
 
 @dp.message(Command("start"))
 async def start(m: types.Message, command: CommandObject):
-    ref_id = None
-    if command.args and command.args.isdigit():
-        ref_id = int(command.args)
-
+    ref_id = int(command.args) if command.args and command.args.isdigit() else None
     async with async_session() as session:
         user = await session.get(User, m.from_user.id)
         if not user:
-            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id, last_touch=int(time.time()))
+            user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id)
             session.add(user)
             if ref_id:
-                referrer = await session.get(User, ref_id)
-                if referrer: referrer.balance += 2500
+                ref = await session.get(User, ref_id)
+                if ref: ref.balance += 2500
             await session.commit()
     
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
-    await m.answer(f"Здарова! Заходи в игру.", reply_markup=kb.as_markup())
+    kb = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
+    await m.answer("Здарова! Заходи в игру.", reply_markup=kb.as_markup())
 
 async def recovery():
     while True:
@@ -142,17 +125,19 @@ async def recovery():
 
 @app.on_event("startup")
 async def on_startup():
-    # 1. Создаем таблицы, если их нет
-    async with engine.begin() as conn: 
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
-        # 2. ПАТЧ: Проверяем наличие колонки last_touch (специально для Postgres на Render)
-        try:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN last_touch INTEGER DEFAULT 0"))
-            logger.info("Column last_touch added successfully.")
-        except Exception as e:
-            # Если колонка уже есть, Postgres выдаст ошибку, это нормально
-            logger.info(f"Column last_touch probably exists: {e}")
+        # Добавляем недостающие колонки по одной (если их нет)
+        cols = [
+            ("last_touch", "INTEGER DEFAULT 0"),
+            ("level", "INTEGER DEFAULT 1"),
+            ("streak", "INTEGER DEFAULT 0"),
+            ("last_checkin", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("referrer_id", "BIGINT")
+        ]
+        for name, type_sql in cols:
+            try: await conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {type_sql}"))
+            except: pass 
 
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     asyncio.create_task(recovery())
