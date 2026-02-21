@@ -37,7 +37,7 @@ class User(Base):
     max_energy = Column(Integer, default=2500)
     last_touch = Column(Integer, default=int(time.time()))
     streak = Column(Integer, default=0)
-    last_checkin = Column(DateTime, default=datetime.utcnow() - timedelta(days=1))
+    last_checkin = Column(DateTime, default=datetime.utcnow() - timedelta(days=2))
     referrer_id = Column(BigInteger, nullable=True)
     is_banned = Column(Boolean, default=False)
     boost_end = Column(DateTime, nullable=True)
@@ -53,7 +53,7 @@ async def keep_alive():
         while True:
             try: await client.get(APP_URL)
             except: pass
-            await asyncio.sleep(600) # 10 минут
+            await asyncio.sleep(600)
 
 async def recovery():
     while True:
@@ -79,29 +79,48 @@ async def get_user(id: int):
             user = User(user_id=id, last_touch=int(time.time()))
             session.add(user); await session.commit(); await session.refresh(user)
         
-        bonus_auto = 0
-        if user.boost_end and user.boost_end > datetime.utcnow():
-            bonus_auto = 50
-            
+        bonus_auto = 50 if (user.boost_end and user.boost_end > datetime.utcnow()) else 0
         return {
-            "score": user.balance, 
-            "mult": user.tap_power, 
-            "auto": user.auto_power + bonus_auto, 
-            "energy": user.energy, 
-            "max_energy": user.max_energy,
-            "boost_active": bonus_auto > 0
+            "score": user.balance, "mult": user.tap_power, "auto": user.auto_power + bonus_auto, 
+            "energy": user.energy, "max_energy": user.max_energy
         }
+
+@app.get("/get_top")
+async def get_top():
+    async with async_session() as session:
+        res = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
+        users = res.scalars().all()
+        return [{"username": u.username or f"Fenix_{str(u.user_id)[-4:]}", "balance": u.balance} for u in users]
 
 @app.post("/s")
 async def save(request: Request):
     d = await request.json()
-    uid = int(d['id'])
     async with async_session() as session:
-        user = await session.get(User, uid)
+        user = await session.get(User, int(d['id']))
         if user and not user.is_banned:
             user.balance, user.energy, user.last_touch = int(d['score']), int(d['energy']), int(time.time())
             await session.commit()
     return {"ok": True}
+
+@app.post("/daily_claim")
+async def daily_claim(request: Request):
+    d = await request.json()
+    async with async_session() as session:
+        user = await session.get(User, int(d['id']))
+        if not user: return {"status": "error", "message": "User not found"}
+        
+        now = datetime.utcnow()
+        delta = (now - user.last_checkin).total_seconds() / 3600
+        
+        if delta < 24:
+            return {"status": "error", "message": f"Жди {int(24-delta)}ч."}
+            
+        user.streak = (user.streak + 1) if delta < 48 else 1
+        bonus = min(user.streak * 1000, 10000)
+        user.balance += bonus
+        user.last_checkin = now
+        await session.commit()
+        return {"status": "ok", "bonus": bonus}
 
 @app.post("/buy_miner")
 async def buy_miner(request: Request):
@@ -120,61 +139,40 @@ async def buy_miner(request: Request):
 async def cmi(request: Request):
     d = await request.json()
     p = {
-        "star_mini": ["Птенец", 150, 5], 
-        "star_mega": ["Король", 500, 25],
-        "boost_7d": ["Огненный Буст (7 дней)", 300, 50],
-        "energy_5k": ["Энергия 5000", 100, 0]
+        "star_mini": ["Птенец", 150, 5], "star_mega": ["Король", 500, 25],
+        "boost_7d": ["Огненный Буст (7 дней)", 300, 50], "energy_5k": ["Энергия 5000", 100, 0]
     }.get(d['type'])
-    
-    link = await bot.create_invoice_link(title=p[0], description=f"Улучшение профиля", payload=f"pay_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label="Stars", amount=p[1])])
+    link = await bot.create_invoice_link(title=p[0], description="Улучшение", payload=f"pay_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label="Stars", amount=p[1])])
     return {"link": link}
 
-# --- ОБРАБОТКА ПЛАТЕЖЕЙ ---
+# --- ПЛАТЕЖИ ---
 @dp.pre_checkout_query()
 async def pre(q: PreCheckoutQuery): await q.answer(ok=True)
 
 @dp.message(F.successful_payment)
 async def pay_ok(m: types.Message):
     pay = m.successful_payment.invoice_payload.split('_')
-    uid = int(pay[2])
     async with async_session() as session:
-        user = await session.get(User, uid)
+        user = await session.get(User, int(pay[2]))
         if user:
-            p_type = pay[1]
-            if p_type == "star_mini": user.auto_power += 5
-            elif p_type == "star_mega": user.auto_power += 25
-            elif p_type == "energy_5k": 
-                user.max_energy = 5000
-                user.energy = 5000
-            elif p_type == "boost_7d":
-                user.boost_end = datetime.utcnow() + timedelta(days=7)
+            t = pay[1]
+            if t == "star_mini": user.auto_power += 5
+            elif t == "star_mega": user.auto_power += 25
+            elif t == "energy_5k": user.max_energy = 5000; user.energy = 5000
+            elif t == "boost_7d": user.boost_end = datetime.utcnow() + timedelta(days=7)
             await session.commit()
 
-# --- ЗАПУСК И ИНИЦИАЛИЗАЦИЯ (ИСПРАВЛЕНО) ---
+# --- СТАРТ ---
 @app.on_event("startup")
 async def on_startup():
-    # 1. Создание базовых таблиц
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
-    # 2. Безопасное добавление колонок по одной (для PostgreSQL)
-    columns_to_add = [
-        ("is_banned", "BOOLEAN DEFAULT FALSE"),
-        ("boost_end", "TIMESTAMP")
-    ]
-    
-    for col_name, col_type in columns_to_add:
+    for c, tp in [("is_banned", "BOOLEAN DEFAULT FALSE"), ("boost_end", "TIMESTAMP")]:
         async with engine.begin() as conn:
-            try:
-                await conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
-                logger.info(f"Колонка {col_name} добавлена.")
-            except Exception:
-                logger.info(f"Колонка {col_name} уже существует.")
-
-    # 3. Вебхук и задачи
+            try: await conn.execute(text(f"ALTER TABLE users ADD COLUMN {c} {tp}"))
+            except: pass
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
-    asyncio.create_task(recovery())
-    asyncio.create_task(keep_alive())
+    asyncio.create_task(recovery()); asyncio.create_task(keep_alive())
 
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
@@ -184,8 +182,8 @@ async def webhook(request: Request):
 
 @dp.message(Command("start"))
 async def start(m: types.Message):
-    builder = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))
-    await m.answer("Феникс пробудился! Начинай тапать прямо сейчас.", reply_markup=builder.as_markup())
+    kb = InlineKeyboardBuilder().button(text="🔥 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL)).as_markup()
+    await m.answer("Феникс ждет тебя!", reply_markup=kb)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
