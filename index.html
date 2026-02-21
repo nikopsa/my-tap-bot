@@ -3,39 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fenix Evolution</title>
+    <title>Fenix Tap</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; }
         body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        .header { padding: 10px; display: flex; flex-wrap: wrap; justify-content: center; background: #111; gap: 5px; }
-        .btn { padding: 10px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 10px; flex: 1; min-width: 80px; font-weight: bold; cursor: pointer; font-size: 10px; }
-        #score { font-size: 45px; font-weight: 800; color: var(--gold); margin: 10px 0; }
-        .coin { width: 200px; height: 200px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 6px solid var(--gold); font-size: 80px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s; position: relative; }
-        .coin:active { transform: scale(0.9); }
-        .progress-box { width: 85%; align-self: center; margin-bottom: 20px; }
-        .bar-bg { width: 100%; height: 12px; background: #222; border-radius: 6px; border: 1px solid #444; overflow: hidden; }
-        .bar-fill { height: 100%; background: linear-gradient(90deg, #ff4500, #ffd700); transition: width 0.3s; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 25px; box-sizing: border-box; overflow-y: auto; }
-        .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); text-align: left; }
+        .header { padding: 10px; display: flex; background: #111; gap: 8px; justify-content: center; }
+        .btn { padding: 10px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 10px; cursor: pointer; font-size: 11px; font-weight: bold; flex: 1; text-transform: uppercase; }
+        #score { font-size: 48px; font-weight: 800; color: var(--gold); margin: 15px 0; text-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+        .coin-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .coin { width: 230px; height: 230px; background: radial-gradient(circle, #ff8c00, #ff4500); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s; box-shadow: 0 0 30px var(--fire); position: relative; }
+        .coin:active { transform: scale(0.92); }
+        .progress-box { width: 85%; align-self: center; margin-bottom: 25px; }
+        .bar-bg { width: 100%; height: 14px; background: #222; border-radius: 7px; border: 1px solid #444; overflow: hidden; }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width 0.3s; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .shop-card { background: #111; padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); text-align: left; }
+        .rank-tag { font-size: 18px; color: var(--gold); font-weight: bold; margin-bottom: 5px; letter-spacing: 2px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="btn" onclick="showTop()">🏆 ТОП</div>
-        <div class="btn" onclick="showFriends()">👥 ДРУЗЬЯ</div>
-        <div class="btn" onclick="showDaily()">🎁 БОНУС</div>
+        <div class="btn" onclick="showTop()">🏆 ЛИДЕРЫ</div>
         <div class="btn" onclick="showShop()">🛒 МАГАЗИН</div>
     </div>
 
-    <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+    <div class="coin-container">
         <div id="score">0</div>
-        <div id="rank" style="color:var(--gold); font-weight:bold; margin-bottom:10px;">ЯЙЦО</div>
+        <div id="rank" class="rank-tag">ЯЙЦО</div>
         <div id="coin" class="coin">🥚</div>
     </div>
 
     <div class="progress-box">
-        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:5px;">
+        <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px; font-weight: bold;">
             <span id="energy-text">⚡ 2500 / 2500</span>
             <span id="auto-text">⛏️ 0/s</span>
         </div>
@@ -43,16 +43,16 @@
     </div>
 
     <div id="modal">
-        <h2 id="m-title" style="color:var(--gold); margin-top:0;"></h2>
+        <h2 id="m-title" style="color:var(--gold); font-size: 24px;"></h2>
         <div id="m-body"></div>
+        <button class="btn" style="width:100%; margin-top:25px; padding: 15px;" onclick="closeM()">⬅️ ВЕРНУТЬСЯ</button>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
         const APP_URL = "https://my-tap-bot.onrender.com";
-        const bot_username = "FenixTap_bot"; // Твой юзернейм бота
-        let uid = tg.initDataUnsafe?.user?.id || 1292046104;
+        let uid = tg.initDataUnsafe?.user?.id || 12345;
         let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500;
 
         async function load() {
@@ -61,7 +61,7 @@
                 let d = await r.json();
                 score = d.score; mult = d.mult; auto = d.auto; energy = d.energy; maxE = d.max_energy;
                 updateUI();
-            } catch(e) {}
+            } catch(e) { console.error("Load error"); }
         }
 
         function updateUI() {
@@ -85,55 +85,55 @@
 
         function openM(t, h) { 
             document.getElementById('m-title').innerText=t; 
-            document.getElementById('m-body').innerHTML=h + `<button class="btn" style="width:100%; background:#222; margin-top:20px; font-size:14px; color:#fff;" onclick="closeM()">⬅️ НАЗАД</button>`;
+            document.getElementById('m-body').innerHTML=h;
             document.getElementById('modal').style.display='block'; 
         }
         function closeM() { document.getElementById('modal').style.display='none'; }
 
-        function showFriends() {
-            let link = `https://t.me/${bot_username}?start=${uid}`;
-            let share = `https://t.me/share/url?url=${link}&text=Лети с Фениксом!`;
-            let h = `
-                <p>Зови друзей и получай 5,000 монет!</p>
-                <div class="shop-card" style="font-size:10px;">${link}</div>
-                <button class="btn" style="width:100%; background:var(--gold); color:black; font-size:14px;" onclick="tg.openTelegramLink('${share}')">🔗 ПОДЕЛИТЬСЯ</button>
-            `;
-            openM("👥 ДРУЗЬЯ", h);
+        async function showTop() {
+            openM("🏆 ЛИДЕРЫ", "<p>Загрузка списка...</p>");
+            try {
+                let r = await fetch(`${APP_URL}/get_top`);
+                let d = await r.json();
+                let medals = ["🥇", "🥈", "🥉"];
+                let h = d.map((u, i) => `
+                    <div class="shop-card">
+                        <span>${medals[i] || (i+1 + '.')} ${u.username}</span>
+                        <b style="color:var(--gold)">${u.balance.toLocaleString()}</b>
+                    </div>
+                `).join('');
+                openM("🏆 ЛИДЕРЫ", h);
+            } catch(e) { openM("🏆 ЛИДЕРЫ", "Ошибка загрузки"); }
         }
 
         function showShop() {
             let cost = (auto + 1) * 1200;
             let h = `
-                <div class="shop-card"><span>⛏️ Майнер (+1/с)<br><small>Цена: ${cost}</small></span><button class="btn" onclick="buyM()">КУПИТЬ</button></div>
-                <div class="shop-card" style="border-color:#2ecc71"><span>⚡ Энергия 5000<br><small>Цена: 100 ⭐</small></span><button class="btn" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
-                <div class="shop-card" style="border-color:var(--fire)"><span>🔥 Огненный Буст<br><small>+50/с на 7 дней | 300 ⭐</small></span><button class="btn" onclick="buyS('boost_7d')">ВЗЯТЬ</button></div>
+                <div class="shop-card"><span>⛏️ Майнер (+1/с)<br><small>Цена: ${cost} 🪙</small></span><button class="btn" onclick="buyM()">КУПИТЬ</button></div>
+                <div class="shop-card" style="border-color:#0088cc"><span>💰 1,000,000 МОНЕТ<br><small>Цена: 500 ⭐</small></span><button class="btn" onclick="buyS('coins_1m')">ВЗЯТЬ</button></div>
+                <div class="shop-card" style="border-color:#2ecc71"><span>⚡ ЭНЕРГИЯ 5000<br><small>Цена: 100 ⭐</small></span><button class="btn" onclick="buyS('energy_5k')">ВЗЯТЬ</button></div>
+                <div class="shop-card" style="border-color:var(--fire)"><span>🔥 БУСТ (+50/с)<br><small>7 дней | 300 ⭐</small></span><button class="btn" onclick="buyS('boost_7d')">ВЗЯТЬ</button></div>
             `;
             openM("🛒 МАГАЗИН", h);
         }
 
         async function buyM() {
-            let r = await fetch(`${APP_URL}/buy_miner`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
-            let d = await r.json();
-            if(d.ok) { score=d.balance; auto=d.auto; updateUI(); showShop(); } else tg.showAlert("Мало монет!");
+            // Упрощенная логика покупки за монеты для примера
+            let cost = (auto + 1) * 1200;
+            if(score >= cost) {
+                score -= cost; auto += 1;
+                updateUI(); showShop();
+            } else { tg.showAlert("Недостаточно монет!"); }
         }
 
         async function buyS(t) {
-            let r = await fetch(`${APP_URL}/create_miner_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:t})});
+            let r = await fetch(`${APP_URL}/create_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:t})});
             let d = await r.json();
-            if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') load(); });
-        }
-
-        async function showDaily() {
-            let r = await fetch(`${APP_URL}/daily_claim`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
-            let d = await r.json();
-            tg.showAlert(d.status === "ok" ? "Бонус получен!" : d.message);
-            load();
+            if(d.link) tg.openInvoice(d.link, (status) => { if(status==='paid') { tg.showAlert("Покупка прошла успешно!"); load(); closeM(); } });
         }
 
         setInterval(() => { if(auto>0){ score+=auto; updateUI(); } }, 1000);
-        setInterval(async () => { 
-            await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})});
-        }, 8000);
+        setInterval(() => { fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:score, energy:energy})}); }, 8000);
         load();
     </script>
 </body>
