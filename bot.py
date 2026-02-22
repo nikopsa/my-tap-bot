@@ -1,4 +1,4 @@
-import os, asyncio, time, logging
+import os, asyncio, time
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,9 +41,8 @@ dp = Dispatcher()
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # ОЧИСТКА: Сбрасываем майнинг всем, у кого он был бесплатный/глючный
-        # Оставляем только тем, кто реально купил улучшения (если они > 5)
-        await conn.execute(text("UPDATE users SET auto_power = 0 WHERE auto_power IS NULL"))
+        # ЖЕСТКИЙ СБРОС МАЙНИНГА ДЛЯ ВСЕХ (убираем баг)
+        await conn.execute(text("UPDATE users SET auto_power = 0"))
         await conn.commit()
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     yield
@@ -54,26 +53,18 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    if os.path.exists("index.html"):
-        with open("index.html", "r", encoding="utf-8") as f: return f.read()
-    return "Online"
+    with open("index.html", "r", encoding="utf-8") as f: return f.read()
 
 @app.get("/get_user")
 async def get_user(id: int):
     async with async_session() as session:
         user = await session.get(User, id)
         if not user:
-            user = User(user_id=id, balance=1000, auto_power=0)
+            user = User(user_id=id, balance=1000, auto_power=0, username=f"User_{id}")
             session.add(user)
             await session.commit()
             await session.refresh(user)
-        return {
-            "score": int(user.balance or 0), 
-            "mult": int(user.tap_power or 1), 
-            "auto": int(user.auto_power or 0), 
-            "energy": int(user.energy or 0), 
-            "max_energy": int(user.max_energy or 2500)
-        }
+        return {"score": user.balance, "mult": user.tap_power, "auto": user.auto_power, "energy": user.energy, "max_energy": user.max_energy}
 
 @app.post("/s")
 async def save(request: Request):
@@ -85,19 +76,37 @@ async def save(request: Request):
             await session.commit()
     return {"ok": True}
 
+# ФУНКЦИЯ ТОП-10 (Теперь не будет 404)
+@app.get("/get_top")
+async def get_top():
+    async with async_session() as session:
+        res = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
+        users = res.scalars().all()
+        return [{"username": u.username or f"ID{u.user_id}", "balance": u.balance} for u in users]
+
+# ФУНКЦИЯ БОНУСА (Теперь не будет 404)
+@app.post("/claim_bonus")
+async def claim_bonus(request: Request):
+    d = await request.json()
+    now = int(time.time())
+    async with async_session() as session:
+        user = await session.get(User, int(d['id']))
+        if user:
+            if now - user.last_bonus < 86400:
+                left = (86400 - (now - user.last_bonus)) // 3600
+                return {"ok": False, "message": f"Бонус через {left}ч"}
+            user.last_bonus = now
+            user.balance += 10000
+            await session.commit()
+            return {"ok": True, "message": "Получено 10,000 монет!"}
+    return {"ok": False, "message": "Ошибка"}
+
 @app.post("/create_invoice")
 async def create_invoice(request: Request):
     d = await request.json()
-    prices = {"pack_light": ["⚡ Start (+8/s)", 100], "pack_ext": ["🔥 Pro (+25/s)", 300]}
-    item = prices.get(d['type'])
-    if not item: return {"error": "not found"}
-    link = await bot.create_invoice_link(title=item[0], description="Upgrade", payload=f"buy_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label=item[0], amount=item[1])])
+    p = {"pack_light": ["⚡ Start (+8/s)", 100], "pack_ext": ["🔥 Pro (+25/s)", 300]}.get(d['type'])
+    link = await bot.create_invoice_link(title=p[0], description="Upgrade", payload=f"buy_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label=p[0], amount=p[1])])
     return {"link": link}
-
-# ... (остальной код бота без изменений)
-@dp.message(Command("start"))
-async def cmd_start(m: types.Message):
-    await m.answer(f"🔥 Привет!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]]))
 
 @app.post(WEBHOOK_PATH)
 async def wh(r: Request):
@@ -113,9 +122,13 @@ async def on_pay(m: types.Message):
     async with async_session() as session:
         user = await session.get(User, int(data[2]))
         if user:
-            if data[1] == "pack_light": user.auto_power = (user.auto_power or 0) + 8
-            elif data[1] == "pack_ext": user.auto_power = (user.auto_power or 0) + 25
+            bonus = 8 if data[1] == "pack_light" else 25
+            user.auto_power = (user.auto_power or 0) + bonus
             await session.commit()
+
+@dp.message(Command("start"))
+async def cmd_start(m: types.Message):
+    await m.answer("🔥 Играй и тапай!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]]))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
