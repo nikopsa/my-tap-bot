@@ -12,33 +12,29 @@
         .btn { padding: 10px 2px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 8px; cursor: pointer; font-size: 10px; font-weight: bold; text-transform: uppercase; }
         #score { font-size: 45px; font-weight: 900; color: var(--gold); margin: 10px 0 5px 0; }
         .coin-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
-        .coin { width: 210px; height: 210px; background: radial-gradient(circle, var(--orange), var(--fire)); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 40px var(--fire); cursor: pointer; position: relative; transition: transform 0.05s; }
+        .coin { width: 210px; height: 210px; background: radial-gradient(circle, var(--orange), var(--fire)); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 40px var(--fire); cursor: pointer; transition: transform 0.05s; }
         .coin:active { transform: scale(0.92); }
-        .fly-text { position: absolute; color: #fff; font-size: 32px; font-weight: 900; pointer-events: none; animation: flyUp 0.7s ease-out forwards; z-index: 1000; text-shadow: 0 0 10px var(--orange); }
-        @keyframes flyUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-150px) scale(1.5); } }
         .progress-box { width: 85%; align-self: center; margin-bottom: 20px; }
         .bar-bg { width: 100%; height: 14px; background: #222; border-radius: 10px; overflow: hidden; border: 1px solid #444; }
         .bar-fill { height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width 0.3s; }
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 20px; backdrop-filter: blur(10px); overflow-y: auto; box-sizing: border-box; }
         .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
-        .shop-info { text-align: left; }
-        .shop-btn { background: var(--gold); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 11px; text-transform: uppercase; }
+        .shop-btn { background: var(--gold); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="btn" onclick="showTop()">ТОП</div>
         <div class="btn" onclick="showShop()">МАГАЗИН</div>
+        <div class="btn" onclick="showTasks()" style="color:#0f0; border-color:#0f0;">ЗАДАНИЯ</div>
         <div class="btn" onclick="showRef()">РЕФ</div>
         <div class="btn" onclick="showAirdrop()" style="color:var(--blue); border-color:var(--blue);">ДРОП</div>
         <div class="btn" onclick="claimBonus()" style="color:var(--orange); border-color:var(--orange);">🎁</div>
-        <div class="btn" onclick="toggleLang()" style="color:#fff; border-color:#fff;">RU/EN</div>
     </div>
 
     <div class="coin-container">
         <div id="score">0</div>
-        <div id="league-name" style="font-weight:bold; font-size:20px;">BRONZE</div>
-        <div id="next-league-text" style="font-size:12px; color:#888;">Next: 5,000</div>
+        <div id="league-name" style="font-weight:bold; font-size:20px; color:var(--gold)">BRONZE</div>
         <div id="coin" class="coin">🥚</div>
     </div>
 
@@ -50,94 +46,74 @@
         <div class="bar-bg"><div id="energy-fill" class="bar-fill"></div></div>
     </div>
 
-    <div id="modal">
-        <h2 id="m-title" style="color:var(--gold);"></h2>
-        <div id="m-body"></div>
-        <button class="btn" style="width:100%; margin-top:25px; padding:15px; font-size:16px;" onclick="closeM()">НАЗАД</button>
-    </div>
+    <div id="modal"><h2 id="m-title" style="color:var(--gold);"></h2><div id="m-body"></div><button class="btn" style="width:100%; margin-top:25px; padding:15px;" onclick="closeM()">НАЗАД</button></div>
 
     <script>
         let tg = window.Telegram.WebApp; tg.ready(); tg.expand();
         const APP_URL = window.location.origin;
-        let lang = localStorage.getItem('lang') || 'ru';
         let uid = tg.initDataUnsafe?.user?.id || 12345;
-        let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500, loaded = false;
-
-        const i18n = {
-            ru: { top: "ТОП-10 ИГРОКОВ", shop: "МАГАЗИН", ref: "РЕФЕРАЛЫ", air: "АИРДРОП", buy: "КУПИТЬ", light: "СТАРТ (+8/с)", ext: "ПРО (+25/с)", wait: "Загрузка...", empty: "Список пуст" },
-            en: { top: "TOP-10 PLAYERS", shop: "SHOP", ref: "REFS", air: "AIRDROP", buy: "BUY", light: "START (+8/s)", ext: "PRO (+25/s)", wait: "Loading...", empty: "List is empty" }
-        };
-
-        const leagues = [
-            { name: "Bronze", limit: 0, color: "#cd7f32" },
-            { name: "Silver", limit: 5000, color: "#c0c0c0" },
-            { name: "Gold", limit: 50000, color: "#ffd700" },
-            { name: "Platinum", limit: 250000, color: "#e5e4e2" },
-            { name: "Diamond", limit: 1000000, color: "#b9f2ff" }
-        ];
+        let score = 0, auto = 0, energy = 2500, maxE = 2500, loaded = false;
 
         async function load() {
-            try {
-                let r = await fetch(`${APP_URL}/get_user?id=${uid}&v=${Date.now()}`);
-                let d = await r.json();
-                score = Number(d.score); mult = Number(d.mult); auto = Number(d.auto); energy = Number(d.energy); maxE = Number(d.max_energy);
-                loaded = true; updateUI();
-            } catch(e) { console.error(e); }
+            let r = await fetch(`${APP_URL}/get_user?id=${uid}&v=${Date.now()}`);
+            let d = await r.json();
+            score = d.score; auto = d.auto; energy = d.energy; maxE = d.max_energy;
+            loaded = true; updateUI();
         }
 
         function updateUI() {
             if(!loaded) return;
-            let currentL = leagues[0]; let nextL = null;
-            for(let l of leagues) { if(score >= l.limit) currentL = l; else { nextL = l; break; } }
-            document.getElementById('league-name').innerText = currentL.name;
-            document.getElementById('league-name').style.color = currentL.color;
             document.getElementById('score').innerText = Math.floor(score).toLocaleString();
             document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxE}`;
             document.getElementById('energy-fill').style.width = (energy/maxE*100) + "%";
             document.getElementById('auto-text').innerText = `⛏️ ${auto}/s`;
         }
 
-        document.getElementById('coin').onclick = (e) => {
-            if(loaded && energy >= mult) {
-                score += mult; energy -= mult;
-                showPop(e); updateUI(); tg.HapticFeedback.impactOccurred('medium');
+        document.getElementById('coin').onclick = () => {
+            if(loaded && energy >= 1) {
+                score += 1; energy -= 1; updateUI(); tg.HapticFeedback.impactOccurred('light');
             }
         };
-
-        function showPop(e) {
-            const x = e.clientX || (e.touches && e.touches[0].clientX) || window.innerWidth/2;
-            const y = e.clientY || (e.touches && e.touches[0].clientY) || window.innerHeight/2;
-            const text = document.createElement('div');
-            text.className = 'fly-text'; text.innerText = `+${mult}`;
-            text.style.left = `${x - 20}px`; text.style.top = `${y - 40}px`;
-            document.body.appendChild(text); setTimeout(() => text.remove(), 700);
-        }
-
-        async function save() {
-            if(!loaded) return;
-            await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:Math.floor(score), energy:Math.floor(energy)})});
-        }
 
         function openM(t, h) { document.getElementById('m-title').innerText = t; document.getElementById('m-body').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
         function closeM() { document.getElementById('modal').style.display = 'none'; }
 
+        function showTasks() {
+            let h = `
+                <div class="shop-card" style="border-color: var(--gold);">
+                    <div style="text-align:left;"><span>📢 Наш канал</span><br><small> Награда: +50,000</small></div>
+                    <button class="shop-btn" onclick="tg.openTelegramLink('https://t.me/твой_канал'); setTimeout(checkSub, 2000)">ПОДПИСАТЬСЯ</button>
+                </div>
+                <div class="shop-card" style="border-color: #ff00ff;">
+                    <div style="text-align:left;"><span>🚀 Рекламный канал</span><br><small> Награда: +70,000</small></div>
+                    <button class="shop-btn" style="background:#ff00ff" onclick="tg.openTelegramLink('https://t.me/рекламный_канал'); setTimeout(checkReklama, 2000)">ПОДПИСАТЬСЯ</button>
+                </div>
+                <button class="btn" style="width:100%; margin-top:10px; background:#222;" onclick="checkSub(); setTimeout(checkReklama, 1000)">ПРОВЕРИТЬ ВСЁ</button>
+            `;
+            openM("ЗАДАНИЯ", h);
+        }
+
+        async function checkSub() {
+            let r = await fetch(`${APP_URL}/check_sub`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
+        }
+
+        async function checkReklama() {
+            let r = await fetch(`${APP_URL}/check_reklama`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
+        }
+
         async function showTop() {
-            const t = i18n[lang];
-            openM(t.top, `<p style="color:gray;">${t.wait}</p>`);
-            try {
-                let r = await fetch(`${APP_URL}/get_top?v=${Date.now()}`);
-                let d = await r.json();
-                if(!d || d.length === 0) { openM(t.top, `<p>${t.empty}</p>`); return; }
-                let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-                openM(t.top, h);
-            } catch(e) { openM(t.top, "Error load"); }
+            let r = await fetch(`${APP_URL}/get_top`);
+            let d = await r.json();
+            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
+            openM("ТОП-10", h);
         }
 
         function showShop() {
-            const t = i18n[lang];
-            let h = `<div class="shop-card" style="border-color:#0f0"><div class="shop-info"><span>⚡ ${t.light}</span><small>100 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_light')">${t.buy}</button></div>
-                     <div class="shop-card" style="border-color:var(--gold)"><div class="shop-info"><span>🔥 ${t.ext}</span><small>300 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_ext')">${t.buy}</button></div>`;
-            openM(t.shop, h);
+            let h = `<div class="shop-card"><div><span>⚡ START (+8/s)</span><br><small>100 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_light')">КУПИТЬ</button></div>
+                     <div class="shop-card"><div><span>🔥 PRO (+25/s)</span><br><small>300 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_ext')">КУПИТЬ</button></div>`;
+            openM("МАГАЗИН", h);
         }
 
         async function buyS(t) {
@@ -147,26 +123,20 @@
 
         function showRef() {
             let l = `https://t.me/fenix_tap_bot?start=${uid}`;
-            openM(i18n[lang].ref, `<p style="word-break:break-all; background:#222; padding:10px;">${l}</p><button class="btn" style="width:100%" onclick="copyRef('${l}')">COPY</button>`);
-        }
-
-        function copyRef(t) {
-            const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select();
-            document.execCommand('copy'); document.body.removeChild(el); tg.showAlert("Copied!");
+            openM("РЕФЕРАЛЫ", `<p style="word-break:break-all; background:#222; padding:10px;">${l}</p><button class="btn" style="width:100%" onclick="tg.showAlert('Скопировано!')">КОПИРОВАТЬ</button>`);
         }
 
         async function claimBonus() {
             let r = await fetch(`${APP_URL}/claim_bonus`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
-            let d = await r.json(); tg.showAlert(d.message);
-            if(d.ok) load();
+            let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
         }
 
-        function showAirdrop() { openM(i18n[lang].air, "<p>Coming soon!</p>"); }
-        function toggleLang() { lang = (lang === 'ru' ? 'en' : 'ru'); localStorage.setItem('lang', lang); updateUI(); }
+        function showAirdrop() { openM("AIRDROP", "<p>Скоро!</p>"); }
 
         setInterval(() => { if(loaded) { if(auto > 0) score += auto; if(energy < maxE) energy = Math.min(maxE, energy + 1); updateUI(); } }, 1000);
-        setInterval(save, 3000);
+        setInterval(async () => { if(loaded) await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:Math.floor(score), energy:Math.floor(energy)})}); }, 3000);
         load();
     </script>
 </body>
-</html>
+    </html>
+    
