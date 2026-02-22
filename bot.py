@@ -15,7 +15,6 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 APP_URL = "https://my-tap-bot.onrender.com" 
 
-# Оставь пустыми, пока не создашь каналы
 CHANNEL_ID = "" 
 REKLAMA_CHANNEL_ID = "" 
 # -----------------
@@ -46,12 +45,10 @@ class User(Base):
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Безопасный авто-постинг ТОПа
 async def auto_leaderboard():
     while True:
         await asyncio.sleep(3600)
-        if not CHANNEL_ID or CHANNEL_ID == "":
-            continue
+        if not CHANNEL_ID: continue
         try:
             async with async_session() as session:
                 res = await session.execute(select(User).order_by(desc(User.balance)).limit(5))
@@ -61,14 +58,12 @@ async def auto_leaderboard():
                     name = u.username or f"Игрок {str(u.user_id)[-4:]}"
                     msg += f"{i+1}. {name} — {u.balance:,} 💰\n"
                 await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode="Markdown")
-        except:
-            print("Ошибка отправки ТОПа: Канал не найден или бот не админ")
+        except: pass
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Сброс вебхука и установка заново для надежности
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}")
     asyncio.create_task(auto_leaderboard())
@@ -115,12 +110,12 @@ async def check_sub(request: Request):
             async with async_session() as session:
                 u = await session.get(User, int(d['id']))
                 if u and u.task_sub == 0:
-                    u.balance += 100000
+                    u.balance += 10000 # ИСПРАВЛЕНО: Теперь дает 10к
                     u.task_sub = 1
                     await session.commit()
-                    return {"ok": True, "message": "Подписка подтверждена! +100k"}
+                    return {"ok": True, "message": "Подписка подтверждена! +10,000"}
     except: pass
-    return {"ok": False, "message": "Вы не подписаны на канал!"}
+    return {"ok": False, "message": "Вы не подписаны!"}
 
 @app.post("/check_reklama")
 async def check_reklama(request: Request):
@@ -132,10 +127,10 @@ async def check_reklama(request: Request):
             async with async_session() as session:
                 u = await session.get(User, int(d['id']))
                 if u and u.task_reklama == 0:
-                    u.balance += 150000
+                    u.balance += 10000 # ИСПРАВЛЕНО: Теперь дает 10к
                     u.task_reklama = 1
                     await session.commit()
-                    return {"ok": True, "message": "Бонус получен! +150k"}
+                    return {"ok": True, "message": "Бонус получен! +10,000"}
     except: pass
     return {"ok": False, "message": "Подпишитесь на рекламный канал!"}
 
@@ -160,14 +155,14 @@ async def cmd_start(m: types.Message, command: CommandObject):
             if ref_id and ref_id != m.from_user.id:
                 ref_user = await session.get(User, ref_id)
                 if ref_user:
-                    ref_user.balance += 50000
+                    ref_user.balance += 5000 # Бонус за друга тоже можно уменьшить, если хочешь
                     if ref_user.referrer_id:
                         grand_ref = await session.get(User, ref_user.referrer_id)
-                        if grand_ref: grand_ref.balance += 15000
+                        if grand_ref: grand_ref.balance += 1000
             await session.commit()
     
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]])
-    await m.answer(f"🔥 Добро пожаловать в Fenix Tap!\n\nПриглашай друзей и получай бонусы.", reply_markup=kb)
+    await m.answer(f"🔥 Добро пожаловать в Fenix Tap!", reply_markup=kb)
 
 @app.post(WEBHOOK_PATH)
 async def wh(r: Request):
@@ -210,4 +205,3 @@ async def create_invoice(request: Request):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-    
