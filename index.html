@@ -10,7 +10,7 @@
         body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; user-select: none; }
         
         /* Шапка с кнопками */
-        .header { padding: 8px; display: grid; grid-template-columns: repeat(3, 1fr); background: #111; gap: 5px; box-shadow: 0 0 15px var(--fire); }
+        .header { padding: 8px; display: grid; grid-template-columns: repeat(4, 1fr); background: #111; gap: 5px; box-shadow: 0 0 15px var(--fire); }
         .btn { padding: 10px 2px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 8px; cursor: pointer; font-size: 10px; font-weight: bold; text-transform: uppercase; }
         
         /* Баланс и Монета */
@@ -40,6 +40,7 @@
         <div class="btn" onclick="showTasks()" style="color:#0f0; border-color:#0f0;">ЗАДАНИЯ</div>
         <div class="btn" onclick="showRef()">РЕФ</div>
         <div class="btn" onclick="showAirdrop()" style="color:var(--blue); border-color:var(--blue);">ДРОП</div>
+        <div class="btn" onclick="showWallet()" style="color:var(--blue); border-color:var(--blue);">WALLET</div>
         <div class="btn" onclick="claimBonus()" style="color:var(--orange); border-color:var(--orange);">🎁</div>
     </div>
 
@@ -204,6 +205,19 @@
             copyText.setSelectionRange(0, 99999);
             document.execCommand("copy");
             tg.showAlert("Ссылка скопирована! Отправь её друзьям 🚀");
+        }
+
+        function showWallet() {
+            let h = `
+                <div style="background:#111; padding:20px; border-radius:15px; border:1px solid var(--blue);">
+                    <img src="https://ton.org/download/ton_symbol.png" width="50" style="margin-bottom:10px;">
+                    <h3>TON Wallet</h3>
+                    <p style="font-size:12px; color:#aaa;">Привяжите ваш кошелек TON для получения будущих наград.</p>
+                    <div id="wallet-status" style="margin:15px 0; font-weight:bold; color:var(--blue);">ПОДКЛЮЧЕНИЕ СКОРО...</div>
+                    <button class="shop-btn" style="width:100%; background:var(--blue); color:white;" onclick="tg.showAlert('Функция подключения кошелька будет доступна в следующем обновлении!')">ПОДКЛЮЧИТЬ</button>
+                </div>
+            `;
+            openM("КОШЕЛЕК", h);
         }
 
         async function claimBonus() {
