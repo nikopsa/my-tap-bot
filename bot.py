@@ -62,17 +62,23 @@ async def auto_leaderboard():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ СТРУКТУРЫ ТАБЛИЦЫ
+    # Исправленное обновление базы данных для PostgreSQL
+    columns = [
+        ("task_sub", "INTEGER DEFAULT 0"),
+        ("task_reklama", "INTEGER DEFAULT 0"),
+        ("referrer_id", "BIGINT")
+    ]
+    
+    for col_name, col_type in columns:
+        async with engine.begin() as conn:
+            try:
+                await conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                print(f"Колонка {col_name} успешно добавлена.")
+            except Exception:
+                # Игнорируем, если колонка уже существует
+                pass
+
     async with engine.begin() as conn:
-        try:
-            # Пытаемся добавить колонки, если их нет
-            await conn.execute(text("ALTER TABLE users ADD COLUMN task_sub INTEGER DEFAULT 0"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN task_reklama INTEGER DEFAULT 0"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN referrer_id BIGINT"))
-            print("База данных обновлена: добавлены новые колонки")
-        except Exception:
-            # Если уже есть — просто игнорируем ошибку
-            pass
         await conn.run_sync(Base.metadata.create_all)
 
     await bot.delete_webhook(drop_pending_updates=True)
@@ -216,4 +222,4 @@ async def create_invoice(request: Request):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-        
+    
