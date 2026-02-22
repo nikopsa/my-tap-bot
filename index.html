@@ -17,6 +17,7 @@
         .coin { width: 210px; height: 210px; background: radial-gradient(circle, var(--orange), var(--fire)); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 40px var(--fire); cursor: pointer; margin-top: 10px; position: relative; transition: transform 0.05s; }
         .coin:active { transform: scale(0.92); }
 
+        /* Анимация тапа */
         .fly-text { position: absolute; color: #fff; font-size: 32px; font-weight: 900; pointer-events: none; animation: flyUp 0.7s ease-out forwards; z-index: 1000; text-shadow: 0 0 10px var(--orange); }
         @keyframes flyUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-150px) scale(1.5); } }
 
@@ -26,13 +27,12 @@
         
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 20px; backdrop-filter: blur(10px); overflow-y: auto; }
         
-        /* Стили МАГАЗИНА (Исправлено) */
+        /* Магазин */
         .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
         .shop-info { text-align: left; flex-grow: 1; }
         .shop-info span { display: block; font-weight: bold; font-size: 14px; }
         .shop-info small { color: #aaa; font-size: 11px; }
         .shop-btn { background: var(--gold); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; min-width: 80px; }
-        .shop-btn:active { transform: scale(0.95); }
 
         #league-name { font-weight: bold; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; }
         #next-league-text { font-size: 12px; color: #888; margin-bottom: 5px; }
@@ -71,8 +71,8 @@
         let lang = localStorage.getItem('lang') || 'ru';
 
         const i18n = {
-            ru: { top: "ТОП", shop: "МАГАЗИН", ref: "РЕФ", air: "ДРОП", back: "НАЗАД", buy: "КУПИТЬ", miner: "Майнер", light: "СТАРТ (+8/с)", ext: "ПРО (+25/с)", no: "Мало!", copy: "Копир!", next: "До: " },
-            en: { top: "TOP", shop: "SHOP", ref: "REF", air: "DROP", back: "BACK", buy: "BUY", miner: "Miner", light: "START (+8/s)", ext: "PRO (+25/s)", no: "No!", copy: "Copied!", next: "Next: " }
+            ru: { top: "ТОП", shop: "МАГАЗИН", ref: "РЕФ", air: "ДРОП", back: "НАЗАД", buy: "КУПИТЬ", light: "СТАРТ (+8/с)", ext: "ПРО (+25/с)", copy: "Копир!", next: "До: " },
+            en: { top: "TOP", shop: "SHOP", ref: "REF", air: "DROP", back: "BACK", buy: "BUY", light: "START (+8/s)", ext: "PRO (+25/s)", copy: "Copied!", next: "Next: " }
         };
 
         const leagues = [
@@ -89,8 +89,11 @@
         async function load() {
             let r = await fetch(`${APP_URL}/get_user?id=${uid}&v=${Date.now()}`);
             let d = await r.json();
-            score = Number(d.score) || 0; mult = Number(d.mult) || 1; 
-            auto = Number(d.auto) || 0; energy = Number(d.energy) || 2500; maxE = Number(d.max_energy) || 2500;
+            score = Number(d.score) || 0;
+            mult = Number(d.mult) || 1;
+            auto = Number(d.auto) || 0;
+            energy = Number(d.energy) || 0;
+            maxE = Number(d.max_energy) || 2500;
             loaded = true; updateUI();
         }
 
@@ -139,10 +142,6 @@
         async function showShop() {
             const t = i18n[lang];
             let h = `
-                <div class="shop-card">
-                    <div class="shop-info"><span>⛏️ ${t.miner} (+1/s)</span><small>${(auto+1)*1500} 🪙</small></div>
-                    <button class="shop-btn" onclick="buyM(${(auto+1)*1500})">${t.buy}</button>
-                </div>
                 <div class="shop-card" style="border-color:#0f0">
                     <div class="shop-info"><span>⚡ ${t.light}</span><small>100 ⭐</small></div>
                     <button class="shop-btn" onclick="buyS('pack_light')">${t.buy}</button>
@@ -155,7 +154,6 @@
             openM(t.shop, h);
         }
 
-        function buyM(c) { if(score >= c) { score -= c; auto += 1; updateUI(); showShop(); save(); } else tg.showAlert(i18n[lang].no); }
         async function buyS(t) {
             let r = await fetch(`${APP_URL}/create_invoice`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, type:t})});
             let d = await r.json(); if(d.link) tg.openInvoice(d.link, (s) => { if(s==='paid') load(); });
