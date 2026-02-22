@@ -188,7 +188,7 @@
             let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
         }
 
-        function showAirdrop() { openM("AIRDROP", "<p>Раздача токенов запланирована на Q4 2026. Тапай больше, чтобы получить больше!</p>"); }
+        function showAirdrop() { openM("AIRDROP", "<p>Раздача токенов запланирована на 11 2026. Тапай больше, чтобы получить больше!</p>"); }
 
         // Таймеры: майнинг каждую секунду, сохранение каждые 3 секунды
         setInterval(() => { if(loaded) { if(auto > 0) score += auto; if(energy < maxE) energy = Math.min(maxE, energy + 0.5); updateUI(); } }, 1000);
