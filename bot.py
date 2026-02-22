@@ -62,7 +62,6 @@ async def auto_leaderboard():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Исправленное обновление базы данных для PostgreSQL
     columns = [
         ("task_sub", "INTEGER DEFAULT 0"),
         ("task_reklama", "INTEGER DEFAULT 0"),
@@ -75,7 +74,6 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
                 print(f"Колонка {col_name} успешно добавлена.")
             except Exception:
-                # Игнорируем, если колонка уже существует
                 pass
 
     async with engine.begin() as conn:
@@ -158,6 +156,13 @@ async def get_top():
         users = res.scalars().all()
         return [{"username": u.username or f"ID{str(u.user_id)[-4:]}", "balance": u.balance} for u in users]
 
+@app.get("/get_referrals")
+async def get_referrals(id: int):
+    async with async_session() as session:
+        res = await session.execute(select(User.username).where(User.referrer_id == id))
+        rows = res.fetchall()
+        return [{"username": row[0] or "Игрок"} for row in rows]
+
 @dp.message(Command("start"))
 async def cmd_start(m: types.Message, command: CommandObject):
     ref_id = None
@@ -172,10 +177,10 @@ async def cmd_start(m: types.Message, command: CommandObject):
             if ref_id and ref_id != m.from_user.id:
                 ref_user = await session.get(User, ref_id)
                 if ref_user:
-                    ref_user.balance += 5000
+                    ref_user.balance += 50000 # Бонус за друга
                     if ref_user.referrer_id:
                         grand_ref = await session.get(User, ref_user.referrer_id)
-                        if grand_ref: grand_ref.balance += 1000
+                        if grand_ref: grand_ref.balance += 15000 # Бонус 2 уровня
             await session.commit()
     
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]])
