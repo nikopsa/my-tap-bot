@@ -17,8 +17,8 @@ APP_URL = "https://my-tap-bot.onrender.com"
 
 CHANNEL_ID = "@FenixTapNews" 
 REKLAMA_CHANNEL_ID = "" 
+BOT_USERNAME = "FenixTap_bot"
 # -----------------
-
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3")
 if DB_URL.startswith("postgres://"):
