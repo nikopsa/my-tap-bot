@@ -129,13 +129,10 @@
         }
 
         async function checkTasksAll() {
-            // Проверка первого
             let r1 = await fetch(`${APP_URL}/check_sub`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
             let d1 = await r1.json();
-            // Проверка второго
             let r2 = await fetch(`${APP_URL}/check_reklama`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
             let d2 = await r2.json();
-            
             tg.showAlert(d1.message + "\n" + d2.message);
             load();
         }
@@ -172,13 +169,39 @@
                     <input type="text" value="${l}" id="refLink" style="width:100%; background:#000; color:#fff; border:1px solid #333; padding:8px; margin:10px 0;" readonly>
                     <button class="btn" style="width:100%" onclick="copyRef()">КОПИРОВАТЬ ССЫЛКУ</button>
                 </div>
+                <h3 style="color:var(--gold); margin-top:20px; font-size:16px;">МОИ РЕФЕРАЛЫ</h3>
+                <div id="friends-list" style="max-height:150px; overflow-y:auto; margin-top:10px;">
+                    <p style="color:gray; font-size:12px;">Загрузка списка...</p>
+                </div>
             `;
             openM("РЕФЕРАЛЫ 2.0", h);
+            loadRefs();
+        }
+
+        async function loadRefs() {
+            try {
+                let r = await fetch(`${APP_URL}/get_referrals?id=${uid}`);
+                let d = await r.json();
+                let div = document.getElementById('friends-list');
+                if (d.length === 0) {
+                    div.innerHTML = '<p style="color:gray; font-size:12px;">У вас пока нет рефералов</p>';
+                } else {
+                    div.innerHTML = d.map(f => `
+                        <div class="shop-card" style="margin-bottom:5px; padding:10px;">
+                            <span style="font-size:13px;">👤 ${f.username}</span>
+                            <span style="color:var(--gold); font-size:13px;">+50,000</span>
+                        </div>
+                    `).join('');
+                }
+            } catch(e) {
+                document.getElementById('friends-list').innerHTML = '<p style="color:red;">Ошибка загрузки</p>';
+            }
         }
 
         function copyRef() {
             let copyText = document.getElementById("refLink");
             copyText.select();
+            copyText.setSelectionRange(0, 99999);
             document.execCommand("copy");
             tg.showAlert("Ссылка скопирована! Отправь её друзьям 🚀");
         }
@@ -190,7 +213,6 @@
 
         function showAirdrop() { openM("AIRDROP", "<p>Раздача токенов запланирована на 11 2026. Тапай больше, чтобы получить больше!</p>"); }
 
-        // Таймеры: майнинг каждую секунду, сохранение каждые 3 секунды
         setInterval(() => { if(loaded) { if(auto > 0) score += auto; if(energy < maxE) energy = Math.min(maxE, energy + 0.5); updateUI(); } }, 1000);
         setInterval(async () => { if(loaded) await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:Math.floor(score), energy:Math.floor(energy)})}); }, 3000);
         
@@ -198,4 +220,3 @@
     </script>
 </body>
 </html>
-
