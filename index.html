@@ -8,18 +8,29 @@
     <style>
         :root { --gold: #ffd700; --bg: #000; --fire: #ff4500; --orange: #ff8c00; --blue: #0088cc; }
         body { background: var(--bg); color: #fff; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; user-select: none; }
+        
+        /* Шапка с кнопками */
         .header { padding: 8px; display: grid; grid-template-columns: repeat(3, 1fr); background: #111; gap: 5px; box-shadow: 0 0 15px var(--fire); }
         .btn { padding: 10px 2px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 8px; cursor: pointer; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+        
+        /* Баланс и Монета */
         #score { font-size: 45px; font-weight: 900; color: var(--gold); margin: 10px 0 5px 0; }
         .coin-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
         .coin { width: 210px; height: 210px; background: radial-gradient(circle, var(--orange), var(--fire)); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 40px var(--fire); cursor: pointer; transition: transform 0.05s; }
         .coin:active { transform: scale(0.92); }
+        
+        /* Прогресс-бары */
         .progress-box { width: 85%; align-self: center; margin-bottom: 20px; }
         .bar-bg { width: 100%; height: 14px; background: #222; border-radius: 10px; overflow: hidden; border: 1px solid #444; }
         .bar-fill { height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width 0.3s; }
+        
+        /* Модальные окна */
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 20px; backdrop-filter: blur(10px); overflow-y: auto; box-sizing: border-box; }
         .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
         .shop-btn { background: var(--gold); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; }
+        
+        .fly-text { position: absolute; color: #fff; font-size: 32px; font-weight: 900; pointer-events: none; animation: flyUp 0.7s ease-out forwards; z-index: 1000; }
+        @keyframes flyUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-120px); } }
     </style>
 </head>
 <body>
@@ -46,7 +57,11 @@
         <div class="bar-bg"><div id="energy-fill" class="bar-fill"></div></div>
     </div>
 
-    <div id="modal"><h2 id="m-title" style="color:var(--gold);"></h2><div id="m-body"></div><button class="btn" style="width:100%; margin-top:25px; padding:15px;" onclick="closeM()">НАЗАД</button></div>
+    <div id="modal">
+        <h2 id="m-title" style="color:var(--gold);"></h2>
+        <div id="m-body"></div>
+        <button class="btn" style="width:100%; margin-top:25px; padding:15px; font-size:16px;" onclick="closeM()">НАЗАД</button>
+    </div>
 
     <script>
         let tg = window.Telegram.WebApp; tg.ready(); tg.expand();
@@ -55,64 +70,91 @@
         let score = 0, auto = 0, energy = 2500, maxE = 2500, loaded = false;
 
         async function load() {
-            let r = await fetch(`${APP_URL}/get_user?id=${uid}&v=${Date.now()}`);
-            let d = await r.json();
-            score = d.score; auto = d.auto; energy = d.energy; maxE = d.max_energy;
-            loaded = true; updateUI();
+            try {
+                let r = await fetch(`${APP_URL}/get_user?id=${uid}&v=${Date.now()}`);
+                let d = await r.json();
+                score = Number(d.score); auto = Number(d.auto); energy = Number(d.energy); maxE = Number(d.max_energy);
+                loaded = true; updateUI();
+            } catch(e) { console.error(e); }
         }
 
         function updateUI() {
             if(!loaded) return;
+            let l_name = "BRONZE", l_color = "#cd7f32";
+            if(score >= 1000000) { l_name = "DIAMOND"; l_color = "#b9f2ff"; }
+            else if(score >= 100000) { l_name = "GOLD"; l_color = "#ffd700"; }
+            else if(score >= 10000) { l_name = "SILVER"; l_color = "#c0c0c0"; }
+
+            document.getElementById('league-name').innerText = l_name;
+            document.getElementById('league-name').style.color = l_color;
             document.getElementById('score').innerText = Math.floor(score).toLocaleString();
             document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxE}`;
             document.getElementById('energy-fill').style.width = (energy/maxE*100) + "%";
             document.getElementById('auto-text').innerText = `⛏️ ${auto}/s`;
         }
 
-        document.getElementById('coin').onclick = () => {
+        document.getElementById('coin').onclick = (e) => {
             if(loaded && energy >= 1) {
-                score += 1; energy -= 1; updateUI(); tg.HapticFeedback.impactOccurred('light');
+                score += 1; energy -= 1;
+                showPop(e); updateUI(); tg.HapticFeedback.impactOccurred('light');
             }
         };
+
+        function showPop(e) {
+            const x = e.clientX || (e.touches && e.touches[0].clientX) || window.innerWidth/2;
+            const y = e.clientY || (e.touches && e.touches[0].clientY) || window.innerHeight/2;
+            const text = document.createElement('div');
+            text.className = 'fly-text'; text.innerText = `+1`;
+            text.style.left = `${x - 20}px`; text.style.top = `${y - 40}px`;
+            document.body.appendChild(text); setTimeout(() => text.remove(), 700);
+        }
 
         function openM(t, h) { document.getElementById('m-title').innerText = t; document.getElementById('m-body').innerHTML = h; document.getElementById('modal').style.display = 'block'; }
         function closeM() { document.getElementById('modal').style.display = 'none'; }
 
-        function showTasks() {
+        async function showTasks() {
             let h = `
                 <div class="shop-card" style="border-color: var(--gold);">
-                    <div style="text-align:left;"><span>📢 Наш канал</span><br><small> Награда: +50,000</small></div>
-                    <button class="shop-btn" onclick="tg.openTelegramLink('https://t.me/твой_канал'); setTimeout(checkSub, 2000)">ПОДПИСАТЬСЯ</button>
+                    <div style="text-align:left;"><span>📢 Наш канал</span><br><small> Награда: +100,000</small></div>
+                    <button class="shop-btn" onclick="tg.openTelegramLink('https://t.me/твой_канал');">ПОДПИСАТЬСЯ</button>
                 </div>
                 <div class="shop-card" style="border-color: #ff00ff;">
-                    <div style="text-align:left;"><span>🚀 Рекламный канал</span><br><small> Награда: +70,000</small></div>
-                    <button class="shop-btn" style="background:#ff00ff" onclick="tg.openTelegramLink('https://t.me/рекламный_канал'); setTimeout(checkReklama, 2000)">ПОДПИСАТЬСЯ</button>
+                    <div style="text-align:left;"><span>🚀 Рекламный канал</span><br><small> Награда: +150,000</small></div>
+                    <button class="shop-btn" style="background:#ff00ff" onclick="tg.openTelegramLink('https://t.me/рекламный_канал');">ПОДПИСАТЬСЯ</button>
                 </div>
-                <button class="btn" style="width:100%; margin-top:10px; background:#222;" onclick="checkSub(); setTimeout(checkReklama, 1000)">ПРОВЕРИТЬ ВСЁ</button>
+                <p style="font-size:10px; color:gray;">После подписки нажмите кнопку ниже:</p>
+                <button class="btn" style="width:100%; margin-top:5px; background:#222;" onclick="checkTasksAll()">ПРОВЕРИТЬ ПОДПИСКИ</button>
             `;
             openM("ЗАДАНИЯ", h);
         }
 
-        async function checkSub() {
-            let r = await fetch(`${APP_URL}/check_sub`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
-            let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
-        }
-
-        async function checkReklama() {
-            let r = await fetch(`${APP_URL}/check_reklama`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
-            let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
+        async function checkTasksAll() {
+            // Проверка первого
+            let r1 = await fetch(`${APP_URL}/check_sub`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d1 = await r1.json();
+            // Проверка второго
+            let r2 = await fetch(`${APP_URL}/check_reklama`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
+            let d2 = await r2.json();
+            
+            tg.showAlert(d1.message + "\n" + d2.message);
+            load();
         }
 
         async function showTop() {
-            let r = await fetch(`${APP_URL}/get_top`);
-            let d = await r.json();
-            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-            openM("ТОП-10", h);
+            openM("ТОП-10", "<p>Загрузка...</p>");
+            try {
+                let r = await fetch(`${APP_URL}/get_top?v=${Date.now()}`);
+                let d = await r.json();
+                let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
+                openM("ТОП-10", h || "Список пуст");
+            } catch(e) { openM("ТОП-10", "Ошибка загрузки"); }
         }
 
         function showShop() {
-            let h = `<div class="shop-card"><div><span>⚡ START (+8/s)</span><br><small>100 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_light')">КУПИТЬ</button></div>
-                     <div class="shop-card"><div><span>🔥 PRO (+25/s)</span><br><small>300 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_ext')">КУПИТЬ</button></div>`;
+            let h = `
+                <div class="shop-card"><div><span>⚡ START (+8/s)</span><br><small>100 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_light')">КУПИТЬ</button></div>
+                <div class="shop-card"><div><span>🔥 PRO (+25/s)</span><br><small>300 ⭐</small></div><button class="shop-btn" onclick="buyS('pack_ext')">КУПИТЬ</button></div>
+            `;
             openM("МАГАЗИН", h);
         }
 
@@ -123,7 +165,22 @@
 
         function showRef() {
             let l = `https://t.me/fenix_tap_bot?start=${uid}`;
-            openM("РЕФЕРАЛЫ", `<p style="word-break:break-all; background:#222; padding:10px;">${l}</p><button class="btn" style="width:100%" onclick="tg.showAlert('Скопировано!')">КОПИРОВАТЬ</button>`);
+            let h = `
+                <div style="background:#1a1a1a; padding:15px; border-radius:10px; border:1px solid var(--gold);">
+                    <p>🎁 <b>+50,000</b> за прямого друга</p>
+                    <p>💸 <b>+15,000</b> за друга вашего друга</p>
+                    <input type="text" value="${l}" id="refLink" style="width:100%; background:#000; color:#fff; border:1px solid #333; padding:8px; margin:10px 0;" readonly>
+                    <button class="btn" style="width:100%" onclick="copyRef()">КОПИРОВАТЬ ССЫЛКУ</button>
+                </div>
+            `;
+            openM("РЕФЕРАЛЫ 2.0", h);
+        }
+
+        function copyRef() {
+            let copyText = document.getElementById("refLink");
+            copyText.select();
+            document.execCommand("copy");
+            tg.showAlert("Ссылка скопирована! Отправь её друзьям 🚀");
         }
 
         async function claimBonus() {
@@ -131,12 +188,13 @@
             let d = await r.json(); tg.showAlert(d.message); if(d.ok) load();
         }
 
-        function showAirdrop() { openM("AIRDROP", "<p>Скоро!</p>"); }
+        function showAirdrop() { openM("AIRDROP", "<p>Раздача токенов запланирована на Q4 2026. Тапай больше, чтобы получить больше!</p>"); }
 
-        setInterval(() => { if(loaded) { if(auto > 0) score += auto; if(energy < maxE) energy = Math.min(maxE, energy + 1); updateUI(); } }, 1000);
+        // Таймеры: майнинг каждую секунду, сохранение каждые 3 секунды
+        setInterval(() => { if(loaded) { if(auto > 0) score += auto; if(energy < maxE) energy = Math.min(maxE, energy + 0.5); updateUI(); } }, 1000);
         setInterval(async () => { if(loaded) await fetch(`${APP_URL}/s`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid, score:Math.floor(score), energy:Math.floor(energy)})}); }, 3000);
+        
         load();
     </script>
 </body>
-    </html>
-    
+</html>
