@@ -11,12 +11,14 @@ from sqlalchemy import Column, BigInteger, Integer, String, select, desc, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+# --- НАСТРОЙКИ ---
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 APP_URL = "https://my-tap-bot.onrender.com" 
 
-# НАСТРОЙКА КАНАЛОВ
-CHANNEL_ID = "@твой_канал" 
-REKLAMA_CHANNEL_ID = "@рекламный_канал" 
+# Оставь пустыми, пока не создашь каналы
+CHANNEL_ID = "" 
+REKLAMA_CHANNEL_ID = "" 
+# -----------------
 
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3")
@@ -39,33 +41,37 @@ class User(Base):
     last_bonus = Column(Integer, default=0)
     task_sub = Column(Integer, default=0)
     task_reklama = Column(Integer, default=0)
-    referrer_id = Column(BigInteger, nullable=True) # Кто пригласил
+    referrer_id = Column(BigInteger, nullable=True)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Функция для авто-постинга ТОПа в канал
+# Безопасный авто-постинг ТОПа
 async def auto_leaderboard():
     while True:
-        await asyncio.sleep(3600) # Раз в час
-        async with async_session() as session:
-            res = await session.execute(select(User).order_by(desc(User.balance)).limit(5))
-            users = res.scalars().all()
-            text = "🏆 **ТОП ЛИДЕРОВ ЧАСА** 🏆\n\n"
-            for i, u in enumerate(users):
-                name = u.username or f"Игрок {str(u.user_id)[-4:]}"
-                text += f"{i+1}. {name} — {u.balance:,} 💰\n"
-            text += f"\n🚀 Играй и побеждай: {APP_URL}"
-            try:
-                await bot.send_message(chat_id=CHANNEL_ID, text=text, parse_mode="Markdown")
-            except: pass
+        await asyncio.sleep(3600)
+        if not CHANNEL_ID or CHANNEL_ID == "":
+            continue
+        try:
+            async with async_session() as session:
+                res = await session.execute(select(User).order_by(desc(User.balance)).limit(5))
+                users = res.scalars().all()
+                msg = "🏆 **ТОП ЛИДЕРОВ** 🏆\n\n"
+                for i, u in enumerate(users):
+                    name = u.username or f"Игрок {str(u.user_id)[-4:]}"
+                    msg += f"{i+1}. {name} — {u.balance:,} 💰\n"
+                await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode="Markdown")
+        except:
+            print("Ошибка отправки ТОПа: Канал не найден или бот не админ")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
-    asyncio.create_task(auto_leaderboard()) # Запуск рассылки ТОПа
+    # Сброс вебхука и установка заново для надежности
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}")
+    asyncio.create_task(auto_leaderboard())
     yield
     await engine.dispose()
 
@@ -74,7 +80,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f: return f.read()
+    if os.path.exists("index.html"):
+        with open("index.html", "r", encoding="utf-8") as f: return f.read()
+    return "Файл index.html не найден"
 
 @app.get("/get_user")
 async def get_user(id: int):
@@ -99,35 +107,35 @@ async def save(request: Request):
 
 @app.post("/check_sub")
 async def check_sub(request: Request):
+    if not CHANNEL_ID: return {"ok": False, "message": "Задание временно недоступно"}
     d = await request.json()
-    uid = int(d['id'])
     try:
-        m = await bot.get_chat_member(CHANNEL_ID, uid)
+        m = await bot.get_chat_member(CHANNEL_ID, int(d['id']))
         if m.status in ["member", "administrator", "creator"]:
             async with async_session() as session:
-                u = await session.get(User, uid)
+                u = await session.get(User, int(d['id']))
                 if u and u.task_sub == 0:
-                    u.balance += 100000 # Увеличил до 100к для мотивации
+                    u.balance += 100000
                     u.task_sub = 1
                     await session.commit()
-                    return {"ok": True, "message": "Успешно! +100,000 монет"}
+                    return {"ok": True, "message": "Подписка подтверждена! +100k"}
     except: pass
-    return {"ok": False, "message": "Подпишитесь на канал!"}
+    return {"ok": False, "message": "Вы не подписаны на канал!"}
 
 @app.post("/check_reklama")
 async def check_reklama(request: Request):
+    if not REKLAMA_CHANNEL_ID: return {"ok": False, "message": "Задание временно недоступно"}
     d = await request.json()
-    uid = int(d['id'])
     try:
-        m = await bot.get_chat_member(REKLAMA_CHANNEL_ID, uid)
+        m = await bot.get_chat_member(REKLAMA_CHANNEL_ID, int(d['id']))
         if m.status in ["member", "administrator", "creator"]:
             async with async_session() as session:
-                u = await session.get(User, uid)
+                u = await session.get(User, int(d['id']))
                 if u and u.task_reklama == 0:
                     u.balance += 150000
                     u.task_reklama = 1
                     await session.commit()
-                    return {"ok": True, "message": "Успешно! +150,000 монет"}
+                    return {"ok": True, "message": "Бонус получен! +150k"}
     except: pass
     return {"ok": False, "message": "Подпишитесь на рекламный канал!"}
 
@@ -149,23 +157,23 @@ async def cmd_start(m: types.Message, command: CommandObject):
         if not user:
             user = User(user_id=m.from_user.id, username=m.from_user.username, referrer_id=ref_id)
             session.add(user)
-            # Бонус пригласившему (1 уровень)
-            if ref_id:
+            if ref_id and ref_id != m.from_user.id:
                 ref_user = await session.get(User, ref_id)
                 if ref_user:
                     ref_user.balance += 50000
-                    # Бонус за 2 уровень (тому, кто пригласил твоего реферала)
                     if ref_user.referrer_id:
                         grand_ref = await session.get(User, ref_user.referrer_id)
                         if grand_ref: grand_ref.balance += 15000
             await session.commit()
     
-    await m.answer(f"🔥 Привет! Приглашай друзей и получай до 50,000 монет за каждого!", 
-                   reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]]))
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]])
+    await m.answer(f"🔥 Добро пожаловать в Fenix Tap!\n\nПриглашай друзей и получай бонусы.", reply_markup=kb)
 
 @app.post(WEBHOOK_PATH)
 async def wh(r: Request):
-    await dp.feed_update(bot, Update.model_validate(await r.json(), context={"bot": bot}))
+    data = await r.json()
+    update = Update.model_validate(data, context={"bot": bot})
+    await dp.feed_update(bot, update)
     return Response(content="ok")
 
 @dp.pre_checkout_query()
@@ -179,6 +187,26 @@ async def on_pay(m: types.Message):
         if user:
             user.auto_power += 8 if data[1] == "pack_light" else 25
             await session.commit()
+
+@app.post("/claim_bonus")
+async def claim_bonus(request: Request):
+    d = await request.json()
+    now = int(time.time())
+    async with async_session() as session:
+        user = await session.get(User, int(d['id']))
+        if user and (now - user.last_bonus >= 86400):
+            user.last_bonus = now
+            user.balance += 10000
+            await session.commit()
+            return {"ok": True, "message": "🎁 +10,000 монет!"}
+    return {"ok": False, "message": "Бонус раз в 24 часа"}
+
+@app.post("/create_invoice")
+async def create_invoice(request: Request):
+    d = await request.json()
+    p = {"pack_light": ["⚡ Start (+8/s)", 100], "pack_ext": ["🔥 Pro (+25/s)", 300]}.get(d['type'])
+    link = await bot.create_invoice_link(title=p[0], description="Boost", payload=f"buy_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label=p[0], amount=p[1])])
+    return {"link": link}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
