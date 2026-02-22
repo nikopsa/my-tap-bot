@@ -56,11 +56,11 @@
         let tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
 
-        // !!! ВСТАВЬ СВОЮ ССЫЛКУ НИЖЕ !!!
         const APP_URL = "https://my-tap-bot.onrender.com"; 
         
         let uid = tg.initDataUnsafe?.user?.id || 12345;
         let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500;
+        let isSaving = false;
 
         async function load() {
             try {
@@ -86,13 +86,18 @@
         document.getElementById('coin').onclick = (e) => {
             if(energy >= mult) {
                 score += mult; energy -= mult;
+                
+                // Эффект вылетающих цифр
                 const p = document.createElement('div');
                 p.className = 'tap-particle'; p.innerText = `+${mult}`;
-                p.style.left = `${e.clientX - 15}px`; p.style.top = `${e.clientY - 20}px`;
+                const x = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+                const y = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+                p.style.left = `${x - 15}px`; p.style.top = `${y - 20}px`;
                 document.body.appendChild(p);
                 setTimeout(() => p.remove(), 800);
+                
                 updateUI();
-                if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+                if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
             }
         };
 
@@ -105,10 +110,12 @@
 
         async function showTop() {
             openM("🏆 ЛИДЕРЫ", "Загрузка...");
-            let r = await fetch(`${APP_URL}/get_top`);
-            let d = await r.json();
-            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-            openM("🏆 ЛИДЕРЫ", h || "Тут пока пусто");
+            try {
+                let r = await fetch(`${APP_URL}/get_top`);
+                let d = await r.json();
+                let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
+                openM("🏆 ЛИДЕРЫ", h || "Тут пока пусто");
+            } catch(e) { openM("🏆 ЛИДЕРЫ", "Ошибка загрузки"); }
         }
 
         function showShop() {
@@ -123,10 +130,6 @@
                     <span>🚀 МУЛЬТИТАП x5<br><small>250 ⭐</small></span>
                     <button class="btn" style="width:80px; background:var(--blue); color:#fff;" onclick="buyS('pack_mult')">ВЗЯТЬ</button>
                 </div>
-                <div class="shop-card" style="border-color:var(--gold)">
-                    <span>💰 ПАКЕТ 5,000,000<br><small>999 ⭐</small></span>
-                    <button class="btn" style="width:80px; background:var(--gold); color:#000;" onclick="buyS('pack_5m')">ВЗЯТЬ</button>
-                </div>
             `;
             openM("🛒 МАГАЗИН", h);
         }
@@ -137,31 +140,47 @@
         }
 
         async function buyS(t) {
-            let r = await fetch(`${APP_URL}/create_invoice`, {
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({id: uid, type: t})
-            });
-            let d = await r.json();
-            if(d.link) tg.openInvoice(d.link, (status) => { if(status === 'paid') load(); });
+            try {
+                let r = await fetch(`${APP_URL}/create_invoice`, {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({id: uid, type: t})
+                });
+                let d = await r.json();
+                if(d.link) tg.openInvoice(d.link, (status) => { if(status === 'paid') load(); });
+            } catch(e) { tg.showAlert("Ошибка при создании счета"); }
         }
 
         function showRef() {
             let link = `https://t.me/fenix_tap_bot?start=${uid}`;
             let h = `
                 <div class="shop-card">Пригласи друга и получи 10,000 монет!</div>
-                <button class="btn" style="width:100%; padding:15px; background:var(--fire); color:#fff;" onclick="tg.openTelegramLink('https://t.me/share/url?url=${encodeURIComponent(link)}&text=Стань богатым Фениксом!')">🔗 ПРИГЛАСИТЬ</button>
+                <button class="btn" style="width:100%; padding:15px; background:var(--fire); color:#fff;" onclick="tg.openTelegramLink('https://t.me/share/url?url=${encodeURIComponent(link)}&text=Стань богатым Фениксом!')">🔗 ПРИГЛАСИТЬ ДРУГА</button>
             `;
             openM("👥 ДРУЗЬЯ", h);
         }
 
-        setInterval(() => { if(auto > 0) { score += auto; updateUI(); } }, 1000);
-        setInterval(() => {
-            fetch(`${APP_URL}/s`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: uid, score: score, energy: energy})
-            });
+        // Таймеры
+        setInterval(() => { 
+            // Автомайнинг
+            if(auto > 0) score += auto; 
+            // Регенерация энергии (+3 в секунду)
+            if(energy < maxE) energy = Math.min(maxE, energy + 3);
+            updateUI(); 
+        }, 1000);
+
+        // Сохранение (с защитой от наложений)
+        setInterval(async () => {
+            if (isSaving) return;
+            isSaving = true;
+            try {
+                await fetch(`${APP_URL}/s`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: uid, score: Math.floor(score), energy: Math.floor(energy)})
+                });
+            } catch(e) { console.error("Save error"); }
+            finally { isSaving = false; }
         }, 8000);
 
         load();
