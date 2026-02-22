@@ -41,8 +41,8 @@ dp = Dispatcher()
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # ЖЕСТКИЙ СБРОС МАЙНИНГА ДЛЯ ВСЕХ (убираем баг)
-        await conn.execute(text("UPDATE users SET auto_power = 0"))
+        # РЕШЕТКА ПОСТАВЛЕНА: Майнинг теперь НЕ обнуляется при деплое
+        # await conn.execute(text("UPDATE users SET auto_power = 0"))
         await conn.commit()
     await bot.set_webhook(url=f"{APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     yield
@@ -53,14 +53,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    with open("index.html", "r", encoding="utf-8") as f: return f.read()
+    if os.path.exists("index.html"):
+        with open("index.html", "r", encoding="utf-8") as f: return f.read()
+    return "Error: index.html not found"
 
 @app.get("/get_user")
 async def get_user(id: int):
     async with async_session() as session:
         user = await session.get(User, id)
         if not user:
-            user = User(user_id=id, balance=1000, auto_power=0, username=f"User_{id}")
+            user = User(user_id=id, balance=1000, auto_power=0, username=f"User_{str(id)[-4:]}")
             session.add(user)
             await session.commit()
             await session.refresh(user)
@@ -76,15 +78,13 @@ async def save(request: Request):
             await session.commit()
     return {"ok": True}
 
-# ФУНКЦИЯ ТОП-10 (Теперь не будет 404)
 @app.get("/get_top")
 async def get_top():
     async with async_session() as session:
         res = await session.execute(select(User).order_by(desc(User.balance)).limit(10))
         users = res.scalars().all()
-        return [{"username": u.username or f"ID{u.user_id}", "balance": u.balance} for u in users]
+        return [{"username": u.username if u.username else f"ID {str(u.user_id)[-5:]}", "balance": u.balance} for u in users]
 
-# ФУНКЦИЯ БОНУСА (Теперь не будет 404)
 @app.post("/claim_bonus")
 async def claim_bonus(request: Request):
     d = await request.json()
@@ -98,14 +98,15 @@ async def claim_bonus(request: Request):
             user.last_bonus = now
             user.balance += 10000
             await session.commit()
-            return {"ok": True, "message": "Получено 10,000 монет!"}
+            return {"ok": True, "message": "🎁 +10,000 монет!"}
     return {"ok": False, "message": "Ошибка"}
 
 @app.post("/create_invoice")
 async def create_invoice(request: Request):
     d = await request.json()
     p = {"pack_light": ["⚡ Start (+8/s)", 100], "pack_ext": ["🔥 Pro (+25/s)", 300]}.get(d['type'])
-    link = await bot.create_invoice_link(title=p[0], description="Upgrade", payload=f"buy_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label=p[0], amount=p[1])])
+    if not p: return {"error": "Type error"}
+    link = await bot.create_invoice_link(title=p[0], description="Upgrade mining power", payload=f"buy_{d['type']}_{d['id']}", provider_token="", currency="XTR", prices=[LabeledPrice(label=p[0], amount=p[1])])
     return {"link": link}
 
 @app.post(WEBHOOK_PATH)
@@ -128,7 +129,7 @@ async def on_pay(m: types.Message):
 
 @dp.message(Command("start"))
 async def cmd_start(m: types.Message):
-    await m.answer("🔥 Играй и тапай!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]]))
+    await m.answer("🔥 Добро пожаловать в Fenix Tap!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="💸 ИГРАТЬ", web_app=types.WebAppInfo(url=APP_URL))]]))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
