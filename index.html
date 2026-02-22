@@ -12,7 +12,7 @@
         .btn { padding: 10px 2px; background: #1a1a1a; border: 1px solid var(--gold); color: var(--gold); border-radius: 8px; cursor: pointer; font-size: 10px; font-weight: bold; text-transform: uppercase; }
         #score { font-size: 45px; font-weight: 900; color: var(--gold); margin: 10px 0 5px 0; }
         .coin-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
-        .coin { width: 210px; height: 210px; background: radial-gradient(circle, var(--orange), var(--fire)); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 40px var(--fire); cursor: pointer; margin-top: 10px; position: relative; transition: transform 0.05s; }
+        .coin { width: 210px; height: 210px; background: radial-gradient(circle, var(--orange), var(--fire)); border-radius: 50%; border: 6px solid var(--gold); font-size: 100px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 40px var(--fire); cursor: pointer; position: relative; transition: transform 0.05s; }
         .coin:active { transform: scale(0.92); }
         .fly-text { position: absolute; color: #fff; font-size: 32px; font-weight: 900; pointer-events: none; animation: flyUp 0.7s ease-out forwards; z-index: 1000; text-shadow: 0 0 10px var(--orange); }
         @keyframes flyUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-150px) scale(1.5); } }
@@ -21,9 +21,8 @@
         .bar-fill { height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width 0.3s; }
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; padding: 20px; backdrop-filter: blur(10px); overflow-y: auto; box-sizing: border-box; }
         .shop-card { background: #111; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
-        .shop-info { text-align: left; flex-grow: 1; }
-        .shop-info span { display: block; font-weight: bold; font-size: 14px; }
-        .shop-btn { background: var(--gold); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; }
+        .shop-info { text-align: left; }
+        .shop-btn { background: var(--gold); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; font-size: 11px; text-transform: uppercase; }
     </style>
 </head>
 <body>
@@ -52,7 +51,7 @@
     </div>
 
     <div id="modal">
-        <h2 id="m-title" style="color:var(--gold); margin-top:0;"></h2>
+        <h2 id="m-title" style="color:var(--gold);"></h2>
         <div id="m-body"></div>
         <button class="btn" style="width:100%; margin-top:25px; padding:15px; font-size:16px;" onclick="closeM()">НАЗАД</button>
     </div>
@@ -65,8 +64,8 @@
         let score = 0, mult = 1, auto = 0, energy = 2500, maxE = 2500, loaded = false;
 
         const i18n = {
-            ru: { top: "ТОП-10", shop: "МАГАЗИН", ref: "РЕФЕРАЛЫ", air: "АИРДРОП", buy: "КУПИТЬ", light: "СТАРТ (+8/с)", ext: "ПРО (+25/с)", next: "До: ", wait: "Ждите..." },
-            en: { top: "TOP-10", shop: "SHOP", ref: "REFS", air: "AIRDROP", buy: "BUY", light: "START (+8/s)", ext: "PRO (+25/s)", next: "Next: ", wait: "Wait..." }
+            ru: { top: "ТОП-10 ИГРОКОВ", shop: "МАГАЗИН", ref: "РЕФЕРАЛЫ", air: "АИРДРОП", buy: "КУПИТЬ", light: "СТАРТ (+8/с)", ext: "ПРО (+25/с)", wait: "Загрузка...", empty: "Список пуст" },
+            en: { top: "TOP-10 PLAYERS", shop: "SHOP", ref: "REFS", air: "AIRDROP", buy: "BUY", light: "START (+8/s)", ext: "PRO (+25/s)", wait: "Loading...", empty: "List is empty" }
         };
 
         const leagues = [
@@ -81,23 +80,17 @@
             try {
                 let r = await fetch(`${APP_URL}/get_user?id=${uid}&v=${Date.now()}`);
                 let d = await r.json();
-                score = Number(d.score) || 0;
-                mult = Number(d.mult) || 1;
-                auto = Number(d.auto) || 0; // ПРИНУДИТЕЛЬНО ПРИНИМАЕМ С СЕРВЕРА
-                energy = Number(d.energy) || 0;
-                maxE = Number(d.max_energy) || 2500;
+                score = Number(d.score); mult = Number(d.mult); auto = Number(d.auto); energy = Number(d.energy); maxE = Number(d.max_energy);
                 loaded = true; updateUI();
             } catch(e) { console.error(e); }
         }
 
         function updateUI() {
             if(!loaded) return;
-            const t = i18n[lang];
             let currentL = leagues[0]; let nextL = null;
             for(let l of leagues) { if(score >= l.limit) currentL = l; else { nextL = l; break; } }
             document.getElementById('league-name').innerText = currentL.name;
             document.getElementById('league-name').style.color = currentL.color;
-            document.getElementById('next-league-text').innerText = nextL ? t.next + (nextL.limit - Math.floor(score)).toLocaleString() : "MAX LEVEL";
             document.getElementById('score').innerText = Math.floor(score).toLocaleString();
             document.getElementById('energy-text').innerText = `⚡ ${Math.floor(energy)} / ${maxE}`;
             document.getElementById('energy-fill').style.width = (energy/maxE*100) + "%";
@@ -129,11 +122,15 @@
         function closeM() { document.getElementById('modal').style.display = 'none'; }
 
         async function showTop() {
-            openM(i18n[lang].top, i18n[lang].wait);
-            let r = await fetch(`${APP_URL}/get_top`);
-            let d = await r.json();
-            let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
-            openM(i18n[lang].top, h);
+            const t = i18n[lang];
+            openM(t.top, `<p style="color:gray;">${t.wait}</p>`);
+            try {
+                let r = await fetch(`${APP_URL}/get_top?v=${Date.now()}`);
+                let d = await r.json();
+                if(!d || d.length === 0) { openM(t.top, `<p>${t.empty}</p>`); return; }
+                let h = d.map((u, i) => `<div class="shop-card"><span>${i+1}. ${u.username}</span><b>${u.balance.toLocaleString()}</b></div>`).join('');
+                openM(t.top, h);
+            } catch(e) { openM(t.top, "Error load"); }
         }
 
         function showShop() {
@@ -150,26 +147,24 @@
 
         function showRef() {
             let l = `https://t.me/fenix_tap_bot?start=${uid}`;
-            let h = `<div style="background:#222; padding:15px; border-radius:10px; margin-bottom:15px; word-break:break-all; font-size:12px; color:var(--gold);">${l}</div>
-                     <button class="btn" style="width:100%" onclick="copyRef('${l}')">КОПИРОВАТЬ ССЫЛКУ</button>`;
-            openM(i18n[lang].ref, h);
+            openM(i18n[lang].ref, `<p style="word-break:break-all; background:#222; padding:10px;">${l}</p><button class="btn" style="width:100%" onclick="copyRef('${l}')">COPY</button>`);
         }
 
-        function copyRef(t) { 
+        function copyRef(t) {
             const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select();
-            document.execCommand('copy'); document.body.removeChild(el); tg.showAlert("Скопировано!"); 
+            document.execCommand('copy'); document.body.removeChild(el); tg.showAlert("Copied!");
         }
 
         async function claimBonus() {
             let r = await fetch(`${APP_URL}/claim_bonus`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:uid})});
             let d = await r.json(); tg.showAlert(d.message);
-            if(d.ok) { score += 10000; updateUI(); save(); }
+            if(d.ok) load();
         }
 
-        function showAirdrop() { openM(i18n[lang].air, "<p>Скоро! Набирайте монеты для участия в раздаче.</p>"); }
+        function showAirdrop() { openM(i18n[lang].air, "<p>Coming soon!</p>"); }
         function toggleLang() { lang = (lang === 'ru' ? 'en' : 'ru'); localStorage.setItem('lang', lang); updateUI(); }
 
-        setInterval(() => { if(loaded) { if(auto > 0) score += (auto/1); if(energy < maxE) energy = Math.min(maxE, energy + 2); updateUI(); } }, 1000);
+        setInterval(() => { if(loaded) { if(auto > 0) score += auto; if(energy < maxE) energy = Math.min(maxE, energy + 1); updateUI(); } }, 1000);
         setInterval(save, 3000);
         load();
     </script>
