@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 TOKEN = "8377110375:AAG31LE62g88acAmbSkdxk_pyeMRmLtqwdM"
 APP_URL = "https://my-tap-bot.onrender.com" 
 
-CHANNEL_ID = "" 
+CHANNEL_ID = "@FenixTapNews" 
 REKLAMA_CHANNEL_ID = "" 
 # -----------------
 
